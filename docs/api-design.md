@@ -590,6 +590,84 @@ GET /organizer/events/{eventId}/report
 
 ---
 
+## 8. Queue Service API (Virtual Waiting Room)
+
+### 8.1. Kiểm tra trạng thái hàng chờ sự kiện
+
+```http
+GET /queue/events/{eventId}/status
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "eventId": "uuid",
+    "queueEnabled": true,
+    "totalWaiting": 1540,
+    "estimatedWaitTimeSeconds": 450
+  }
+}
+```
+
+### 8.2. WebSocket Connection (STOMP Protocol)
+
+* **Endpoint:** `wss://api.ticketbooking.vn/ws/queue/{eventId}`
+* **Subscription Topic:** `/user/queue/position`
+* **Heartbeat Client -> Server:** Gửi frame `HEARTBEAT` mỗi 10 giây.
+* **Server Message: Cập nhật vị trí:**
+```json
+{
+  "type": "POSITION_UPDATE",
+  "position": 145,
+  "totalWaiting": 1540,
+  "estimatedWaitSeconds": 90
+}
+```
+* **Server Message: Được cấp phép vào mua (Admitted):**
+```json
+{
+  "type": "ADMITTED",
+  "accessToken": "queue-jwt-or-uuid-token",
+  "expiresInSeconds": 600
+}
+```
+
+---
+
+## 9. Recommend Service API (AI Gợi Ý Sự Kiện)
+
+### 9.1. Gợi ý sự kiện cá nhân hóa 🔒 (CUSTOMER)
+
+```http
+GET /recommendations/events/for-you?limit=10
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "eventId": "uuid",
+      "title": "Hà Anh Tuấn Live Concert - Chân Trời Rực Rỡ",
+      "categoryName": "Âm nhạc",
+      "matchScore": 0.94,
+      "reasons": ["Phù hợp với sở thích Acoustic/Pop", "Dựa trên lịch sử xem sự kiện tương tự"]
+    }
+  ]
+}
+```
+
+### 9.2. Sự kiện tương tự (Similar Events)
+
+```http
+GET /recommendations/events/{eventId}/similar?limit=5
+```
+
+---
+
 > 🔒 = Yêu cầu JWT Authentication
 >
-> 📄 Xem thêm: [System Design](system-design.md) | [Database Schema](database-schema.md) | [Technical Flows](technical-flows.md)
+> 📄 Xem thêm: [System Design](system-design.md) | [Database Schema](database-schema.md) | [Technical Flows](technical-flows.md) | [Virtual Waiting Room](virtual-waiting-room.md)

@@ -55,10 +55,10 @@ Khi sự kiện "hot" mở bán (ví dụ: concert Sơn Tùng MTP), **50.000 ng�
 
 | Thành phần | Công nghệ | Vai trò |
 |------------|-----------|---------|
-| **Queue Service** | Spring Boot + WebSocket | Quản lý hàng chờ, cấp token vào |
+| **Queue Service** | Java 21+ / Spring Boot 4.1.1+ (WebSocket STOMP) | Quản lý hàng chờ, cấp token vào |
 | **Redis Sorted Set** | Redis ZADD/ZRANK | Lưu thứ tự hàng chờ (O(log N)) |
 | **Redis Counter** | Redis INCR/DECR | Đếm số người đang ở trong trang đặt vé |
-| **WebSocket (STOMP)** | Spring WebSocket | Push real-time vị trí cho client |
+| **WebSocket (STOMP)** | Spring WebSocket (Spring Boot 4.1.1+) | Push real-time vị trí cho client |
 | **Heartbeat** | WebSocket Ping/Pong | Phát hiện ngắt kết nối → loại khỏi hàng chờ |
 
 ---
@@ -476,7 +476,7 @@ public BookingResponse createBooking(BookingRequest request, String accessToken)
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                                                         │
-│              🎫 SƠN TÙNG MTP LIVE CONCERT              │
+│               SƠN TÙNG MTP LIVE CONCERT                 │
 │                   Phòng chờ mua vé                      │
 │                                                         │
 │         ┌─────────────────────────────────┐             │
@@ -490,14 +490,14 @@ public BookingResponse createBooking(BookingRequest request, String accessToken)
 │                                                         │
 │         ████████████░░░░░░░░░░░░░░░░░░░░  35%           │
 │                                                         │
-│         ⏱ Thời gian chờ ước tính: ~7 phút              │
+│           Thời gian chờ ước tính: ~7 phút               │
 │                                                         │
 │         ─────────────────────────────────               │
 │                                                         │
-│         ⚠️  Đừng đóng trang này!                       │
-│         Bạn sẽ mất vị trí nếu rời khỏi.                 │
+│              Đừng đóng trang này!                       │
+│           Bạn sẽ mất vị trí nếu rời khỏi.               │
 │                                                         │
-│         🟢 Kết nối: Ổn định                             │
+│                Kết nối: Ổn định                         │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```

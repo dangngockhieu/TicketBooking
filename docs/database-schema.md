@@ -6,17 +6,18 @@
 
 ## Nguyên tắc thiết kế
 
-- **Database per Service**: Mỗi service sở hữu CSDL riêng biệt
-- **Soft Key (Khóa ngoại mềm)**: Tham chiếu giữa service bằng UUID, không dùng FK ràng buộc
-- **Hard FK (Khóa ngoại cứng)**: Chỉ dùng cho các bảng **trong cùng 1 service**
-- **UUID Primary Key**: Tất cả bảng sử dụng UUID v4 làm PK
-- **Audit Columns**: Mọi bảng đều có `created_at` và `updated_at`
+- **Database per Service (Physical Isolation)**: Mỗi service sở hữu riêng 1 container CSDL độc lập (5 cụm PostgreSQL riêng biệt, không dùng chung container).
+- **Quản lý Migration bằng Flyway**: Mã nguồn từng service tự chịu trách nhiệm chạy các file migration (`V1__init_schema.sql`), tự động bật extension (`uuid-ossp`, `pgcrypto`) khi khởi động.
+- **Soft Key (Khóa ngoại mềm)**: Tham chiếu giữa các service bằng UUID, tuyệt đối không dùng FK cứng chéo database.
+- **Hard FK (Khóa ngoại cứng)**: Chỉ dùng cho các bảng nằm **trong cùng 1 service**.
+- **UUID Primary Key**: Tất cả bảng sử dụng UUID v4 làm PK (`gen_random_uuid()`).
+- **Audit Columns**: Mọi bảng đều có `created_at` và `updated_at`.
 
 ---
 
 ## 1. Auth Service Database
 
-> **Engine**: PostgreSQL | **Schema**: `auth`
+> **Container**: `postgres-auth` | **Host Port**: `5433` | **DB Name**: `auth_db`
 
 ### Bảng `accounts`
 
@@ -49,7 +50,7 @@ CREATE INDEX idx_accounts_role_status ON accounts(role, status);
 
 ## 2. User Service Database
 
-> **Engine**: PostgreSQL | **Schema**: `user_profile`
+> **Container**: `postgres-user` | **Host Port**: `5434` | **DB Name**: `user_db`
 
 ### Bảng `profiles`
 
@@ -58,8 +59,10 @@ CREATE INDEX idx_accounts_role_status ON accounts(role, status);
 | `id` | `UUID` | **PK** | Mã hồ sơ |
 | `account_id` | `UUID` | **UNIQUE**, NOT NULL | 🔗 Soft Key → Auth.accounts |
 | `full_name` | `VARCHAR(255)` | NOT NULL | Họ tên |
-| `phone_number` | `VARCHAR(20)` | | Số điện thoại |
+| `phone_number` | `VARCHAR(20)` | UNIQUE | Số điện thoại |
 | `avatar_url` | `VARCHAR(500)` | | URL ảnh đại diện |
+| `user_type` | `VARCHAR(20)` | NOT NULL | `CUSTOMER` hoặc `ORGANIZER` |
+| `metadata` | `JSONB` | DEFAULT '{}'::jsonb | Dữ liệu mở rộng (sở thích nhạc, KYC ngân hàng/thuế) |
 | `created_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày tạo |
 | `updated_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày cập nhật |
 
@@ -68,20 +71,24 @@ CREATE TABLE profiles (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id    UUID         NOT NULL UNIQUE,  -- Soft Key → Auth Service
     full_name     VARCHAR(255) NOT NULL,
-    phone_number  VARCHAR(20),
+    phone_number  VARCHAR(20)  UNIQUE,
     avatar_url    VARCHAR(500),
+    user_type     VARCHAR(20)  NOT NULL CHECK (user_type IN ('CUSTOMER', 'ORGANIZER')),
+    metadata      JSONB        DEFAULT '{}'::jsonb,
     created_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_profiles_account_id ON profiles(account_id);
+CREATE INDEX idx_profiles_phone ON profiles(phone_number);
+CREATE INDEX idx_profiles_metadata ON profiles USING GIN (metadata);
 ```
 
 ---
 
 ## 3. Catalog Service Database
 
-> **Engine**: PostgreSQL | **Schema**: `catalog`
+> **Container**: `postgres-catalog` | **Host Port**: `5435` | **DB Name**: `catalog_db`
 
 ### Bảng `categories`
 
@@ -188,7 +195,7 @@ CREATE INDEX idx_ticket_classes_event ON ticket_classes(event_id);
 
 ## 4. Booking Service Database
 
-> **Engine**: PostgreSQL + Redis | **Schema**: `booking`
+> **Container**: `postgres-booking` | **Host Port**: `5436` | **DB Name**: `booking_db` + **Redis** (`6379`)
 
 ### Bảng `bookings`
 
@@ -290,7 +297,7 @@ TTL:    không set (clean up bằng background job)
 
 ## 5. Payment Service Database
 
-> **Engine**: PostgreSQL | **Schema**: `payment`
+> **Container**: `postgres-payment` | **Host Port**: `5437` | **DB Name**: `payment_db`
 
 ### Bảng `transactions`
 
@@ -331,7 +338,7 @@ CREATE INDEX idx_transactions_gateway ON transactions(gateway_trans_id);
 
 ## 6. Notification Service Database
 
-> **Engine**: MongoDB | **Collection**: `notification_logs`
+> **Container**: `mongodb` | **Host Port**: `27017` | **DB Name**: `notification_db` | **Collection**: `notification_logs`
 
 ### Collection `notification_logs`
 

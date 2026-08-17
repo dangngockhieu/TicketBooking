@@ -1,0 +1,249 @@
+version: '3.8'
+
+services:
+  # ==============================================================================
+  # 1. POSTGRESQL - AUTH SERVICE DATABASE
+  # ==============================================================================
+  postgres-auth:
+    image: postgres:16-alpine
+    container_name: ticketbooking-postgres-auth
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME}
+      POSTGRES_USER: ${AUTH_DB_USER}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+    ports:
+      - "${AUTH_DB_PORT}:5432"
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER} -d ${AUTH_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 2. POSTGRESQL - USER SERVICE DATABASE
+  # ==============================================================================
+  postgres-user:
+    image: postgres:16-alpine
+    container_name: ticketbooking-postgres-user
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${USER_DB_NAME}
+      POSTGRES_USER: ${USER_DB_USER}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD}
+    ports:
+      - "${USER_DB_PORT}:5432"
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USER_DB_USER} -d ${USER_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 3. POSTGRESQL - CATALOG SERVICE DATABASE
+  # ==============================================================================
+  postgres-catalog:
+    image: postgres:16-alpine
+    container_name: ticketbooking-postgres-catalog
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${CATALOG_DB_NAME}
+      POSTGRES_USER: ${CATALOG_DB_USER}
+      POSTGRES_PASSWORD: ${CATALOG_DB_PASSWORD}
+    ports:
+      - "${CATALOG_DB_PORT}:5432"
+    volumes:
+      - postgres_catalog_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CATALOG_DB_USER} -d ${CATALOG_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 4. POSTGRESQL - BOOKING SERVICE DATABASE
+  # ==============================================================================
+  postgres-booking:
+    image: postgres:16-alpine
+    container_name: ticketbooking-postgres-booking
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${BOOKING_DB_NAME}
+      POSTGRES_USER: ${BOOKING_DB_USER}
+      POSTGRES_PASSWORD: ${BOOKING_DB_PASSWORD}
+    ports:
+      - "${BOOKING_DB_PORT}:5432"
+    volumes:
+      - postgres_booking_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${BOOKING_DB_USER} -d ${BOOKING_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 5. POSTGRESQL - PAYMENT SERVICE DATABASE
+  # ==============================================================================
+  postgres-payment:
+    image: postgres:16-alpine
+    container_name: ticketbooking-postgres-payment
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PAYMENT_DB_NAME}
+      POSTGRES_USER: ${PAYMENT_DB_USER}
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
+    ports:
+      - "${PAYMENT_DB_PORT:-5437}:5432"
+    volumes:
+      - postgres_payment_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER} -d ${PAYMENT_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 6. REDIS (Distributed Lock, Seat Holding 10 phút, Waiting Room Queue)
+  # ==============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ticketbooking-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --save 60 1
+      --loglevel warning
+      --notify-keyspace-events Ex
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 7. APACHE KAFKA (KRaft Mode - Tối ưu hiệu năng, không cần Zookeeper)
+  # ==============================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: ticketbooking-kafka
+    restart: unless-stopped
+    ports:
+      - "${KAFKA_PORT}:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:${KAFKA_PORT}'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:${KAFKA_PORT},CONTROLLER://0.0.0.0:29093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:${KAFKA_PORT} || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 8. KAFKA UI (Giao diện trực quan quản trị Topics & Consumers)
+  # ==============================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ticketbooking-kafka-ui
+    restart: unless-stopped
+    ports:
+      - "${KAFKA_UI_PORT}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: ticketbooking-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      AUTH_TYPE: "LOGIN_FORM"
+      SPRING_SECURITY_USER_NAME: ${KAFKA_UI_USERNAME}
+      SPRING_SECURITY_USER_PASSWORD: ${KAFKA_UI_PASSWORD}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 9. MONGODB (Notification Service Logs)
+  # ==============================================================================
+  mongodb:
+    image: mongo:7.0
+    container_name: ticketbooking-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "-u", "${MONGO_ROOT_USER}", "-p", "${MONGO_ROOT_PASSWORD}", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ticketbooking-network
+
+# ==============================================================================
+# VOLUMES (Lưu trữ dữ liệu độc lập cho từng Container)
+# ==============================================================================
+volumes:
+  postgres_auth_data:
+    driver: local
+  postgres_user_data:
+    driver: local
+  postgres_catalog_data:
+    driver: local
+  postgres_booking_data:
+    driver: local
+  postgres_payment_data:
+    driver: local
+  redis_data:
+    driver: local
+  kafka_data:
+    driver: local
+  mongo_data:
+    driver: local
+
+# ==============================================================================
+# NETWORKS (Mạng ảo nội bộ Docker kết nối các service)
+# ==============================================================================
+networks:
+  ticketbooking-network:
+    name: ticketbooking-network
+    driver: bridge

@@ -2,11 +2,11 @@
 
 > **Hệ thống Đặt vé Sự kiện phân tán — Distributed Event Ticketing System**
 
-[![Java](https://img.shields.io/badge/Java-17+-orange?logo=openjdk)](https://openjdk.org/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen?logo=spring-boot)](https://spring.io/projects/spring-boot)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-blue?logo=postgresql)](https://www.postgresql.org/)
+[![Java](https://img.shields.io/badge/Java-21%2B-orange?logo=openjdk)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.1%2B-brightgreen?logo=spring-boot)](https://spring.io/projects/spring-boot)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue?logo=postgresql)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7+-red?logo=redis)](https://redis.io/)
-[![Kafka](https://img.shields.io/badge/Apache%20Kafka-3.x-black?logo=apache-kafka)](https://kafka.apache.org/)
+[![Kafka](https://img.shields.io/badge/Apache%20Kafka-KRaft-black?logo=apache-kafka)](https://kafka.apache.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-blue?logo=docker)](https://docs.docker.com/compose/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
@@ -16,32 +16,32 @@
 
 - [Tổng quan](#-tổng-quan)
 - [Kiến trúc hệ thống](#-kiến-trúc-hệ-thống)
+- [Kiến trúc Database & Bảo mật](#-kiến-trúc-database--bảo-mật)
 - [Tính năng chính](#-tính-năng-chính)
 - [Tech Stack](#-tech-stack)
 - [Cấu trúc dự án](#-cấu-trúc-dự-án)
-- [Cài đặt & Chạy](#-cài-đặt--chạy)
+- [Cài đặt & Khởi chạy](#-cài-đặt--khởi-chạy)
 - [Tài liệu chi tiết](#-tài-liệu-chi-tiết)
-- [Đóng góp](#-đóng-góp)
 - [License](#-license)
 
 ---
 
 ## 🎯 Tổng quan
 
-**TicketBooking** là nền tảng thương mại điện tử chuyên biệt cho việc phân phối vé sự kiện. Dự án được xây dựng theo kiến trúc **Microservices** kết hợp **Event-Driven Architecture (EDA)** nhằm giải quyết các thách thức:
+**TicketBooking** là nền tảng thương mại điện tử chuyên biệt cho việc phân phối vé sự kiện. Dự án được thiết kế theo kiến trúc **Microservices** kết hợp **Event-Driven Architecture (EDA)** nhằm giải quyết các bài toán kỹ thuật phức tạp:
 
-- 🔥 **Burst Traffic** — Hàng ngàn người cùng mua vé khi sự kiện "hot" mở bán
-- 🔒 **Anti-Overbooking** — Đảm bảo không bán vượt quá số lượng vé phát hành
-- ⚡ **Real-time** — Hiển thị tình trạng vé theo thời gian thực
-- 🔄 **Eventual Consistency** — Đảm bảo nhất quán dữ liệu qua Kafka event
+- 🔥 **Burst Traffic** — Hàng ngàn đến hàng vạn người cùng truy cập khi sự kiện "hot" mở bán.
+- 🚦 **Virtual Waiting Room** — Tự động kích hoạt phòng chờ ảo khi quá tải, xếp hàng real-time qua WebSocket.
+- 🔒 **Anti-Overbooking** — Cơ chế giữ chỗ nguyên tử (Atomic Seat Hold) với Redis `INCRBY` đảm bảo không bán vượt quá số vé.
+- 🔄 **Eventual Consistency** — Đồng bộ dữ liệu bất đồng bộ giữa các dịch vụ qua Apache Kafka và Saga Pattern.
 
 ### Mô hình kinh doanh
 
 ```
 B2B2C (Mô hình đóng)
-├── Admin         → Kiểm duyệt & cấp tài khoản cho Organizer
-├── Organizer     → Đăng tải sự kiện, quản lý vé, check-in
-└── Customer      → Đăng ký tự do, tìm kiếm & mua vé
+├── Admin         → Phê duyệt & cấp tài khoản cho Ban tổ chức (chống lừa đảo)
+├── Organizer     → Tạo sự kiện, cấu hình hạng vé, quét mã QR check-in, xem báo cáo
+└── Customer      → Đăng ký tự do, tìm kiếm sự kiện, giữ chỗ và thanh toán trực tuyến
 ```
 
 ---
@@ -49,87 +49,113 @@ B2B2C (Mô hình đóng)
 ## 🏗 Kiến trúc hệ thống
 
 ```
-                          ┌─────────────────┐
-                          │   API Gateway   │
-                          │ (Spring Cloud)  │
-                          └────────┬────────┘
-                                   │
-          ┌────────────────────────┼────────────────────────┐
-          │                        │                        │
-   ┌──────▼──────┐         ┌──────▼──────┐         ┌──────▼──────┐
-   │ Auth Service│         │Catalog Svc  │         │Booking Svc  │
-   │  (JWT/RBAC) │         │(Events/Tix) │         │  (Orders)   │
-   │ PostgreSQL  │         │ PostgreSQL  │         │ PostgreSQL  │
-   └─────────────┘         └─────────────┘         │   + Redis   │
-                                                   └───────┬─────┘
-                                                           │
-                                   ┌───────────────────────┤
-                                   │                       │
-                            ┌──────▼──────┐         ┌──────▼──────┐
-                            │Payment Svc  │         │  User Svc   │
-                            │  (VNPay)    │         │ (Profiles)  │
-                            │ PostgreSQL  │         │ PostgreSQL  │
-                            └──────┬──────┘         └─────────────┘
-                                   │
-                            ┌──────▼──────┐
-                            │   Apache    │
-                            │   Kafka     │
-                            └──────┬──────┘
-                                   │
-                            ┌──────▼──────┐
-                            │Notification │
-                            │  Service    │
-                            │  MongoDB    │
-                            └─────────────┘
+                           ┌─────────────────────────┐
+                           │       API Gateway       │
+                           │ (Spring Cloud Gateway)  │
+                           └────────────┬────────────┘
+                                        │
+        ┌───────────────┬───────────────┼──────────────┬───────────────┐
+        │               │               │              │               │
+ ┌──────▼───────┐┌──────▼───────┐┌──────▼──────┐┌──────▼──────┐┌───────▼───────┐
+ │ Auth Service ││ User Service ││ Catalog Svc ││ Booking Svc ││ Queue Service │
+ │  (JWT/RBAC)  ││  (Profiles)  ││ (Events/Tix)││  (Orders)   ││ (Waiting Room)│
+ │   Postgres   ││   Postgres   ││  Postgres   ││Postgres+Rds ││Redis+WebSocket│
+ └──────────────┘└──────────────┘└─────────────┘└──────┬──────┘└───────────────┘
+                                                       │
+                                       ┌───────────────┤
+                                       │               │
+                                ┌──────▼──────┐┌───────▼──────┐
+                                │ Payment Svc ││ Notification │
+                                │   (VNPay)   ││   Service    │
+                                │   Postgres  ││   MongoDB    │
+                                └──────┬──────┘└───────▲──────┘
+                                       │               │
+                                ┌──────▼───────────────┴──────┐
+                                │        Apache Kafka         │
+                                │   (Event-Driven Backbone)   │
+                                └─────────────────────────────┘
 ```
 
-> 📄 Xem chi tiết tại [System Design](docs/system-design.md)
+> 📄 Xem chi tiết tại [System Design](docs/system-design.md) và [Architecture Diagrams](docs/architecture-diagrams.md)
+
+---
+
+## 🔐 Kiến trúc Database & Bảo mật
+
+Hệ thống tuân thủ nghiêm ngặt nguyên tắc **Database per Service** và **Đặc quyền tối thiểu (Principle of Least Privilege - PoLP)**:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        TICKETBOOKING DOCKER NETWORK                         │
+│                                                                             │
+│   ┌────────────────┐   ┌────────────────┐   ┌────────────────┐              │
+│   │ postgres-auth  │   │ postgres-user  │   │postgres-catalog│              │
+│   │  (Port 5433)   │   │  (Port 5434)   │   │  (Port 5435)   │              │
+│   └────────┬───────┘   └────────┬───────┘   └────────┬───────┘              │
+│            │                    │                    │                      │
+│       Auth Service         User Service       Catalog Service               │
+│                                                                             │
+│   ┌────────────────┐   ┌────────────────┐                                   │
+│   │postgres-booking│   │postgres-payment│   + Redis, Kafka, MongoDB         │
+│   │  (Port 5436)   │   │  (Port 5437)   │                                   │
+│   └────────┬───────┘   └────────┬───────┘                                   │
+│            │                    │                                           │
+│      Booking Service      Payment Service                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+* **Cách ly phần cứng tuyệt đối (True Physical Isolation):** Mỗi service sở hữu riêng 1 container PostgreSQL hoàn toàn độc lập (`postgres-auth`, `postgres-user`, `postgres-catalog`, `postgres-booking`, `postgres-payment`). Nếu 1 container gặp sự cố, các service khác vẫn hoạt động bình thường.
+* **Cấu hình động 100% qua file [`.env`](.env.example):** Tất cả database name, user, password, port và host đều được nạp trực tiếp từ `.env`. Khi cần chuyển từ Localhost lên VPS hoặc Cloud RDS, **chỉ cần sửa `.env`, không cần sửa một dòng code nào**.
+* **Redis Protected Mode:** Redis được bảo vệ bằng mật khẩu (`requirepass`) và kích hoạt Keyspace Notification (`Ex`) phục vụ tự động nhả vé.
+* **MongoDB Auth:** Quản lý truy cập phân quyền giữa root admin và application user (`notification_user`).
 
 ---
 
 ## ✨ Tính năng chính
 
-### 👤 Customer
+### 👤 Customer (Khách hàng)
 | Tính năng | Mô tả |
 |-----------|--------|
-| 🔍 Tìm kiếm & Lọc | Tìm sự kiện theo danh mục, thời gian, địa điểm |
-| 📊 Xem vé Real-time | Số lượng vé còn trống cập nhật theo thời gian thực |
-| 🔒 Giữ chỗ (Seat Hold) | Khóa vé trong 10 phút chờ thanh toán |
-| 💳 Thanh toán Online | Tích hợp VNPay/Stripe |
-| 🎟 E-Ticket (QR Code) | Nhận vé điện tử qua email sau thanh toán |
+| 🔍 Tìm kiếm & Lọc | Tìm sự kiện theo danh mục (Âm nhạc, Thể thao...), địa điểm, thời gian |
+| 📊 Tình trạng vé Real-time | Hiển thị số lượng vé còn trống chính xác theo thời gian thực |
+| 🚦 Xếp hàng phòng chờ ảo | Khi sự kiện quá tải, tự động vào phòng chờ với số thứ tự và thời gian ước tính |
+| 🔒 Giữ chỗ (Seat Hold) | Khóa số lượng vé mong muốn trong **10 phút** để thanh toán |
+| 💳 Thanh toán Trực tuyến | Thanh toán qua cổng VNPay Sandbox (hỗ trợ thẻ ATM, QR Pay) |
+| 🎟 E-Ticket (QR Code) | Nhận vé điện tử có mã QR độc nhất qua email ngay sau khi thanh toán |
 
-### 🏢 Organizer
+### 🏢 Organizer (Ban tổ chức)
 | Tính năng | Mô tả |
 |-----------|--------|
-| 📝 Quản lý sự kiện | Tạo, chỉnh sửa, cấu hình thời gian bán vé |
-| 🎫 Quản lý hạng vé | Định nghĩa VIP, GA, giá tiền, số lượng |
-| 📱 Check-in QR | Quét mã QR xác minh vé tại cổng sự kiện |
-| 📈 Báo cáo doanh thu | Thống kê vé bán ra và doanh thu |
+| 📝 Quản lý sự kiện | Đăng tải thông tin, banner, cấu hình thời gian mở/đóng bán |
+| 🎫 Quản lý hạng vé | Phân loại VVIP, VIP, GA với giá bán và số lượng phát hành |
+| 📱 Check-in QR Code | Quét mã QR xác minh vé vào cổng, chặn quét trùng lặp |
+| 📈 Báo cáo doanh thu | Thống kê vé bán ra, tỷ lệ lấp đầy và doanh thu thực tế |
 
-### ⚙️ System Background
+### ⚙️ System Background & Resilience
 | Tính năng | Mô tả |
 |-----------|--------|
-| 🚦 Virtual Waiting Room | Tự động bật hàng chờ khi quá tải, xếp hàng real-time qua WebSocket |
-| ⏰ Auto-Release | Tự động nhả vé nếu không thanh toán sau 10 phút |
-| 📧 Email tự động | Gửi QR code ngay khi thanh toán thành công |
-| 🔄 Saga Rollback | Hoàn tiền tự động nếu hệ thống gặp lỗi |
+| ⏰ Auto-Release Seat | Tự động hủy đơn và nhả vé về kho nếu không thanh toán sau 10 phút |
+| 🔌 Disconnect Detection | Cơ chế Heartbeat WebSocket (15s): mất mạng/đóng tab là tự động loại khỏi hàng chờ |
+| 🔄 Saga Rollback | Tự động hoàn tiền nếu hệ thống gặp sự cố sinh vé sau khi đã trừ tiền |
 
 ---
 
 ## 🛠 Tech Stack
 
-| Thành phần | Công nghệ |
-|------------|-----------|
-| **Backend Framework** | Java 17+ / Spring Boot 3.x |
-| **API Gateway** | Spring Cloud Gateway |
-| **Database (chính)** | PostgreSQL 15+ |
-| **Database (log)** | MongoDB 7+ |
-| **Cache & Lock** | Redis 7+ |
-| **Message Broker** | Apache Kafka 3.x |
-| **Authentication** | JWT (JSON Web Token) + Spring Security |
-| **Containerization** | Docker & Docker Compose |
-| **CI/CD** | Jenkins / GitHub Actions |
-| **Documentation** | Swagger / OpenAPI 3.0 |
+| Thành phần | Công nghệ | Chi tiết |
+|------------|-----------|----------|
+| **Backend Framework** | Java 21+ / Spring Boot 4.1.1+ | Virtual Threads (Project Loom), Spring Cloud Gateway, Spring Security |
+| **AI Recommendation** | Python 3.11 / FastAPI | AI Event Recommendation Engine (Gợi ý sự kiện thông minh) |
+| **Relational Database** | PostgreSQL 16 | 5 Cụm Container độc lập, UUID v4, JSONB metadata, Flyway |
+| **Document Database** | MongoDB 7 | Lưu trữ unstructured notification logs |
+| **Cache & Distributed Lock**| Redis 7 | Atomic `INCRBY`, Keyspace Events, Sorted Set |
+| **Message Broker** | Apache Kafka 3.7+ | Chế độ **KRaft Mode** (không cần Zookeeper, tối ưu RAM) |
+| **Kafka Management** | Kafka UI | Giao diện web trực quan quản trị Topics & Consumers (Port 8090) |
+| **Service Discovery** | Spring Cloud Eureka | Quản lý định tuyến và phát hiện dịch vụ động (Port 8761) |
+| **Config Management** | Spring Cloud Config | Quản lý tập trung toàn bộ cấu hình hệ thống (Port 8888) |
+| **Observability** | Prometheus + Grafana + Jaeger | Metrics, Alerting, Dashboard và Distributed Tracing |
+| **Bảo mật** | JWT + RBAC | Access Token (ngắn hạn) + Refresh Token |
+| **DevOps & Containers** | Docker & Docker Compose | Đóng gói toàn bộ infrastructure và services |
 
 ---
 
@@ -137,23 +163,27 @@ B2B2C (Mô hình đóng)
 
 ```
 TicketBooking/
-├── docs/                           #    Tài liệu thiết kế
+├── docs/                           # 📄 Toàn bộ tài liệu thiết kế hệ thống
 │   ├── system-design.md            #    Thiết kế hệ thống tổng quan
-│   ├── database-schema.md          #    Thiết kế CSDL chi tiết
-│   ├── api-design.md               #    Thiết kế RESTful API
-│   ├── technical-flows.md          #    Luồng xử lý kỹ thuật
-│   └── architecture-diagrams.md    #    Sơ đồ kiến trúc (Mermaid)
+│   ├── database-schema.md          #    Thiết kế CSDL chi tiết & SQL DDL
+│   ├── api-design.md               #    Đặc tả RESTful API endpoints
+│   ├── technical-flows.md          #    Luồng kỹ thuật (Seat hold, Payment, Saga)
+│   ├── architecture-diagrams.md    #    Sơ đồ kiến trúc Mermaid
+│   └── virtual-waiting-room.md     #    Thiết kế chi tiết phòng chờ ảo
+├── services/                       # 🔧 Mã nguồn các Microservices (theo plan)
+│   ├── api-gateway/                #    API Gateway (Port 8080)
+│   ├── auth-service/               #    Xác thực & Phân quyền (Port 8081)
+│   ├── user-service/               #    Hồ sơ người dùng (Port 8082)
+│   ├── catalog-service/            #    Danh mục & Sự kiện (Port 8083)
+│   ├── booking-service/            #    Đặt vé & Giữ chỗ Core (Port 8084)
+│   ├── payment-service/            #    Thanh toán VNPay (Port 8085)
+│   ├── notification-service/       #    Thông báo & Email QR (Port 8086)
+│   ├── queue-service/              #    Phòng chờ ảo WebSocket (Port 8087)
+│   └── recommend-service/          #    AI Gợi ý sự kiện - Python/FastAPI (Port 8088)
 │
-├── services/                       #    Microservices
-│   ├── api-gateway/                #    API Gateway
-│   ├── auth-service/               #    Xác thực & Phân quyền
-│   ├── user-service/               #    Hồ sơ người dùng
-│   ├── catalog-service/            #    Danh mục & Sự kiện
-│   ├── booking-service/            #    Đặt vé (Core)
-│   ├── payment-service/            #    Thanh toán
-│   └── notification-service/       #    Thông báo
-│
-├── docker-compose.yml              #    Docker Compose
+├── docker-compose.yml              # 🚀 File docker-compose khởi chạy toàn bộ hạ tầng
+├── .env.example                    # 📋 Template biến môi trường mẫu
+├── .env                            # 🔒 File biến môi trường thực tế (Git ignore)
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -161,60 +191,60 @@ TicketBooking/
 
 ---
 
-## 🚀 Cài đặt & Chạy
+## 🚀 Cài đặt & Khởi chạy
 
-### Yêu cầu
+### Yêu cầu tiên quyết
+- **Docker Desktop** (hỗ trợ Docker Compose v2)
+- **Java 21+** & **Maven 3.9+** (khi chạy mã nguồn backend)
 
-- Java 17+
-- Docker & Docker Compose
-- Maven 3.8+
-
-### Khởi chạy Infrastructure
-
+### Bước 1: Thiết lập biến môi trường
+Tạo file `.env` từ mẫu `.env.example`:
 ```bash
-# Clone dự án
-git clone https://github.com/dangngockhieu/TicketBooking.git
-cd TicketBooking
+cp .env.example .env
+```
+*(Bạn có thể mở file `.env` để tùy chỉnh mật khẩu Database, Redis, Kafka theo ý muốn).*
 
-# Khởi chạy PostgreSQL, Redis, Kafka, MongoDB
-docker-compose up -d
-
-# Build tất cả services
-mvn clean package -DskipTests
-
-# Chạy từng service (mở terminal riêng cho mỗi service)
-cd services/auth-service && mvn spring-boot:run
-cd services/user-service && mvn spring-boot:run
-cd services/catalog-service && mvn spring-boot:run
-cd services/booking-service && mvn spring-boot:run
-cd services/payment-service && mvn spring-boot:run
-cd services/notification-service && mvn spring-boot:run
+### Bước 2: Khởi chạy toàn bộ hạ tầng (Infrastructure)
+```bash
+docker compose up -d
 ```
 
-### Truy cập
+Kiểm tra trạng thái các container:
+```bash
+docker compose ps
+```
 
-| Service | URL |
-|---------|-----|
-| API Gateway | `http://localhost:8080` |
-| Auth Service | `http://localhost:8081` |
-| User Service | `http://localhost:8082` |
-| Catalog Service | `http://localhost:8083` |
-| Booking Service | `http://localhost:8084` |
-| Payment Service | `http://localhost:8085` |
-| Notification Service | `http://localhost:8086` |
+### Bước 3: Truy cập các cổng dịch vụ hạ tầng
+
+| Dịch vụ | Địa chỉ Host | Database / User / Password (trong `.env`) |
+| :--- | :--- | :--- |
+| **PostgreSQL - Auth** | `localhost:5433` | DB: `auth_db` \| User: `auth_user` \| Pass: `auth_pass_2026` |
+| **PostgreSQL - User** | `localhost:5434` | DB: `user_db` \| User: `user_svc_user` \| Pass: `user_svc_pass_2026` |
+| **PostgreSQL - Catalog** | `localhost:5435` | DB: `catalog_db` \| User: `catalog_user` \| Pass: `catalog_pass_2026` |
+| **PostgreSQL - Booking** | `localhost:5436` | DB: `booking_db` \| User: `booking_user` \| Pass: `booking_pass_2026` |
+| **PostgreSQL - Payment** | `localhost:5437` | DB: `payment_db` \| User: `payment_user` \| Pass: `payment_pass_2026` |
+| **Redis** | `localhost:6379` | Mật khẩu: `redis_secure_pass_2026` |
+| **Kafka Broker** | `localhost:9092` | PLAINTEXT |
+| **Kafka UI Dashboard** | [http://localhost:8090](http://localhost:8090) | `admin` / `admin_kafka_2026` |
+| **MongoDB** | `localhost:27017` | `mongo_admin` / `mongo_secure_pass_2026` |
+
+Dừng toàn bộ hạ tầng:
+```bash
+docker compose down
+```
 
 ---
 
 ## 📚 Tài liệu chi tiết
 
 | Tài liệu | Nội dung |
-|-----------|----------|
-| [📐 System Design](docs/system-design.md) | Thiết kế hệ thống tổng quan, actors, use cases |
-| [🗄 Database Schema](docs/database-schema.md) | Chi tiết bảng, quan hệ, indexes |
-| [🔌 API Design](docs/api-design.md) | RESTful API endpoints, request/response |
-| [⚡ Technical Flows](docs/technical-flows.md) | Luồng Seat Hold, Payment, Saga |
-| [📊 Architecture Diagrams](docs/architecture-diagrams.md) | Sơ đồ kiến trúc, sequence diagrams |
-| [🚦 Virtual Waiting Room](docs/virtual-waiting-room.md) | Thiết kế phòng chờ ảo, WebSocket, heartbeat |
+|:---|:---|
+| [📐 System Design](docs/system-design.md) | Tổng quan hệ thống, Actors, Use Cases, Microservices, RBAC Matrix |
+| [🗄 Database Schema](docs/database-schema.md) | Thiết kế chi tiết từng bảng, kiểu dữ liệu, Indexes, Redis keys |
+| [🔌 API Design](docs/api-design.md) | Đặc tả Request/Response, Error codes, HTTP Status cho tất cả APIs |
+| [⚡ Technical Flows](docs/technical-flows.md) | Luồng Atomic Seat Hold, Kafka Event Choreography, Saga Rollback |
+| [📊 Architecture Diagrams](docs/architecture-diagrams.md) | 7 sơ đồ Mermaid (System, Sequence, ER, State Machine, Deployment) |
+| [🚦 Virtual Waiting Room](docs/virtual-waiting-room.md) | Cơ chế phòng chờ ảo, WebSocket STOMP, Heartbeat, Auto-enable |
 
 ---
 
@@ -225,5 +255,5 @@ Dự án được phân phối theo giấy phép [MIT License](LICENSE).
 ---
 
 <p align="center">
-  <b>TicketBooking</b> — Built with ❤️ for High-Performance Event Ticketing
+  <b>TicketBooking</b> — Built with ❤️ for High-Performance Distributed Event Ticketing
 </p>

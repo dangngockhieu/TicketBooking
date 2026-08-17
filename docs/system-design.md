@@ -1,6 +1,6 @@
 # 📐 Thiết Kế Hệ Thống — TicketBooking
 
-> Tài liệu thiết kế tổng quan cho Hệ thống Đặt vé Sự kiện phân tán
+> Tài liệu thiết kế tổng quan cho Hệ thống Đặt vé Sự kiện phân tán (Distributed Event Ticketing System)
 
 ---
 
@@ -8,14 +8,15 @@
 
 ### 1.1. Mục tiêu
 
-**TicketBooking** là nền tảng thương mại điện tử chuyên biệt cho việc phân phối vé sự kiện, được thiết kế để giải quyết các bài toán:
+**TicketBooking** là nền tảng thương mại điện tử chuyên biệt cho việc phân phối vé sự kiện. Dự án được thiết kế theo kiến trúc **Microservices** và **Event-Driven Architecture (EDA)** nhằm giải quyết triệt để các thách thức lớn:
 
-| Thách thức | Giải pháp |
-|------------|-----------|
-| Burst Traffic (hàng ngàn request/giây khi mở bán) | Kiến trúc Microservices + Horizontal Scaling |
-| Overbooking (bán vượt quá số lượng vé) | Redis Distributed Lock + Atomic Operations |
-| Eventual Consistency (nhất quán dữ liệu phân tán) | Apache Kafka + Saga Pattern |
-| Single Point of Failure | Database per Service + Service Independence |
+| Thách thức | Giải pháp kỹ thuật |
+| :--- | :--- |
+| **Burst Traffic** (Hàng vạn người truy cập đồng thời khi mở bán) | **Virtual Waiting Room** (Queue Service) dùng WebSocket + Redis Sorted Set |
+| **Overbooking** (Bán vượt quá số lượng vé phát hành) | **Atomic Seat Hold** dùng Redis `INCRBY` / Lua Script (giữ chỗ 10 phút) |
+| **Eventual Consistency** (Nhất quán dữ liệu phân tán) | **Apache Kafka** (KRaft mode) + **Saga Pattern** (Rollback compensation) |
+| **Single Point of Failure** (Sự cố lan truyền) | **Database per Service** với 5 container PostgreSQL độc lập, Spring Cloud Gateway |
+| **Khả năng mở rộng & Quản trị** | **Spring Cloud Config** + **Eureka Discovery** + **Prometheus/Grafana** |
 
 ### 1.2. Mô hình kinh doanh
 
@@ -29,223 +30,176 @@ B2B2C (Mô hình đóng)
                                     Đăng sự kiện                   Đăng ký tự do
 ```
 
-- **Admin**: Kiểm duyệt và cấp tài khoản cho Organizer → chống lừa đảo
-- **Organizer**: Đăng tải sự kiện, quản lý vé, check-in
-- **Customer**: Đăng ký tự do, tìm kiếm và mua vé
-
-### 1.3. Core Technologies
-
-| Công nghệ | Vai trò |
-|------------|---------|
-| RESTful API | Giao tiếp đồng bộ giữa các service |
-| Apache Kafka | Message Broker cho giao tiếp bất đồng bộ |
-| Redis | Distributed Lock & Caching |
-| JWT | Xác thực và phân quyền |
+* **Admin:** Kiểm duyệt pháp lý và cấp tài khoản cho Organizer ➔ Đảm bảo an toàn, chống lừa đảo bán vé giả.
+* **Organizer:** Đăng tải sự kiện, phân hạng vé (VVIP, VIP, GA), quản lý check-in cổng bằng QR Code, xem báo cáo doanh thu.
+* **Customer:** Đăng ký tự do, tìm kiếm sự kiện, xếp hàng phòng chờ ảo, giữ chỗ 10 phút, thanh toán online và nhận vé QR qua email.
 
 ---
 
-## 2. Phân tích Actor và Use Case
+## 2. Phân tích Actor và Use Case Cốt Lõi
 
 ### 2.1. Customer (Khách hàng)
-
-| # | Use Case | Mô tả |
-|---|----------|--------|
-| UC-C1 | Đăng ký / Đăng nhập | Tạo tài khoản mới hoặc đăng nhập bằng email/password |
-| UC-C2 | Tìm kiếm & Lọc sự kiện | Tìm theo Category (Âm nhạc, Thể thao...), thời gian, địa điểm |
-| UC-C3 | Xem tình trạng vé (Real-time) | Xem số lượng vé còn trống theo thời gian thực |
-| UC-C4 | Giữ chỗ tạm thời (Seat Holding) | Khóa số lượng vé mong muốn trong **10 phút** chờ thanh toán |
-| UC-C5 | Thanh toán | Thanh toán qua cổng tích hợp (VNPay/Stripe) |
-| UC-C6 | Xem lịch sử đặt vé | Xem danh sách các đơn hàng đã đặt |
-| UC-C7 | Nhận E-Ticket | Nhận mã QR qua email sau khi thanh toán thành công |
+* **UC-C1: Đăng ký / Đăng nhập:** Tạo tài khoản, đăng nhập nhận JWT Access & Refresh Token.
+* **UC-C2: Tìm kiếm & Lọc sự kiện:** Tìm theo Category (Âm nhạc, Thể thao...), thời gian, địa điểm, từ khóa.
+* **UC-C3: Gợi ý sự kiện thông minh:** Nhận danh sách sự kiện gợi ý từ **Recommend Service (Python)** dựa trên sở thích và lịch sử.
+* **UC-C4: Xếp hàng phòng chờ ảo (Waiting Room):** Khi sự kiện quá tải, tự động vào hàng chờ với số thứ tự và thời gian chờ ước tính theo thời gian thực (WebSocket).
+* **UC-C5: Giữ chỗ tạm thời (Seat Holding):** Khóa số vé mong muốn trong **10 phút** để thanh toán mà không lo bị người khác cướp vé.
+* **UC-C6: Thanh toán Online:** Thanh toán qua cổng VNPay Sandbox (thẻ ATM, QR Pay).
+* **UC-C7: Nhận & Quản lý vé điện tử:** Nhận mã QR duy nhất qua email; xem lịch sử đặt vé trong hồ sơ cá nhân.
 
 ### 2.2. Organizer (Ban tổ chức)
-
-| # | Use Case | Mô tả |
-|---|----------|--------|
-| UC-O1 | Quản lý sự kiện | Tạo/sửa/xóa sự kiện, cấu hình thời gian mở/đóng bán vé |
-| UC-O2 | Quản lý hạng vé | Định nghĩa loại vé (VVIP, VIP, GA), giá, số lượng phát hành |
-| UC-O3 | Check-in QR | Quét mã QR tại cổng sự kiện để xác minh vé |
-| UC-O4 | Xem báo cáo | Thống kê số lượng vé bán ra và doanh thu thực tế |
+* **UC-O1: Quản lý sự kiện:** Tạo sự kiện (DRAFT), đăng banner, cấu hình địa điểm, thời gian mở/đóng bán vé, Publish sự kiện.
+* **UC-O2: Quản lý hạng vé:** Định nghĩa hạng vé (VVIP, VIP, GA), giá tiền và giới hạn số lượng phát hành.
+* **UC-O3: Kiểm soát vé (Check-in QR):** Dùng ứng dụng quét mã QR tại cổng sự kiện để đối chiếu và xác nhận vào cổng (chặn quét trùng).
+* **UC-O4: Báo cáo & Thống kê:** Xem dashboard doanh thu thực tế, số vé bán ra và tỷ lệ lấp đầy.
 
 ### 2.3. Admin (Quản trị viên)
+* **UC-A1: Quản lý Organizer:** Phê duyệt/khóa tài khoản Organizer sau khi kiểm tra giấy phép tổ chức.
+* **UC-A2: Quản lý danh mục:** Quản lý các Category sự kiện.
+* **UC-A3: Giám sát hệ thống:** Theo dõi dashboard Grafana về tải hệ thống, lượng request/giây, hàng chờ.
 
-| # | Use Case | Mô tả |
-|---|----------|--------|
-| UC-A1 | Quản lý Organizer | Duyệt/cấp/khóa tài khoản Organizer |
-| UC-A2 | Quản lý danh mục | Tạo/sửa các Category sự kiện |
-| UC-A3 | Giám sát hệ thống | Xem dashboard tổng quan |
-
-### 2.4. System Background (Hệ thống chạy ngầm)
-
-| # | Use Case | Mô tả |
-|---|----------|--------|
-| UC-S1 | Auto-Release Seat | Hủy đơn hàng & nhả vé nếu không thanh toán sau 10 phút |
-| UC-S2 | Event-driven Notification | Gửi email QR code khi thanh toán thành công |
-| UC-S3 | Saga Rollback/Refund | Hoàn tiền nếu hệ thống sinh vé lỗi sau khi đã trừ tiền |
+### 2.4. System Background (Tiến trình tự động)
+* **UC-S1: Auto-Release Seat:** Tự động hủy đơn hàng và nhả vé về kho nếu người dùng không thanh toán sau 10 phút.
+* **UC-S2: Heartbeat Monitor:** Tự động loại người dùng khỏi hàng chờ nếu mất kết nối WebSocket quá 15 giây.
+* **UC-S3: Event-driven Notification:** Hứng Kafka event thanh toán thành công để sinh vé QR và gửi email HTML tự động.
+* **UC-S4: Saga Compensation:** Tự động hoàn tiền qua VNPay nếu lỗi hệ thống xảy ra sau khi khách đã bị trừ tiền.
 
 ---
 
-## 3. Thiết kế Microservices
+## 3. Kiến Trúc Microservices Chuẩn Enterprise
 
-### 3.1. Tổng quan các Service
+Hệ thống được thiết kế theo kiến trúc Microservices hiện đại, tương thích hoàn toàn với triển khai trên Docker lẫn Kubernetes (K8s):
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         API Gateway                                 │
-│                    (Spring Cloud Gateway)                           │
-│              Routing, Rate Limiting, JWT Validation                 │
-└─────────┬───────────┬───────────┬──────────┬───────────┬────────────┘
-          │           │           │          │           │
-    ┌─────▼────┐ ┌────▼─────┐ ┌───▼───┐ ┌────▼───┐ ┌─────▼────┐
-    │   Auth   │ │   User   │ │Catalog│ │Booking │ │  Payment │
-    │ Service  │ │  Service │ │Service│ │Service │ │  Service │
-    │          │ │          │ │       │ │        │ │          │
-    │PostgreSQL│ │PostgreSQL│ │ PgSQL │ │  PgSQL │ │PostgreSQL│
-    └──────────┘ └──────────┘ └───────┘ │ +Redis │ └─────┬────┘
-                                        └───┬────┘       │
-                                            │      ┌─────▼─────┐
-                                            │      │   Kafka   │
-                                            │      │   Broker  │
-                                            │      └─────┬─────┘
-                                            │            │
-                                            │     ┌──────▼───────┐
-                                            │     │ Notification │
-                                            │     │  Service     │
-                                            │     │  MongoDB     │
-                                            └─────┴──────────────┘
-```
-
-### 3.2. Chi tiết từng Service
-
-| Service | Trách nhiệm | Database | Giao tiếp |
-|---------|-------------|----------|-----------|
-| **Auth Service** | Đăng nhập, cấp JWT, phân quyền (RBAC) | PostgreSQL | Sync (REST) |
-| **User Service** | Quản lý profile người dùng | PostgreSQL | Sync (REST) |
-| **Catalog Service** | Quản lý danh mục, sự kiện, hạng vé | PostgreSQL | Sync (REST) + Kafka Consumer |
-| **Booking Service** | Đặt vé, giữ chỗ, quản lý đơn hàng | PostgreSQL + Redis | Sync (REST) + Kafka Producer/Consumer |
-| **Payment Service** | Xử lý thanh toán, tích hợp VNPay | PostgreSQL | Sync (REST) + Kafka Producer |
-| **Notification Service** | Gửi email, lưu log thông báo | MongoDB | Kafka Consumer only |
-
-### 3.3. Nguyên tắc thiết kế
-
-- **Database per Service**: Mỗi service có CSDL riêng, không dùng chung
-- **Soft Key (Khóa ngoại mềm)**: Tham chiếu giữa các service bằng ID, không dùng FK cứng
-- **Async by Default**: Ưu tiên giao tiếp bất đồng bộ qua Kafka cho các luồng không cần response ngay
-- **Idempotency**: Mọi Kafka consumer phải xử lý idempotent (nhận cùng 1 event 2 lần không gây side effect)
-
----
-
-## 4. Kafka Topics & Events
-
-### 4.1. Danh sách Topics
-
-| Topic | Producer | Consumer(s) | Mô tả |
-|-------|----------|-------------|--------|
-| `payment.success` | Payment Service | Booking Service | Thanh toán thành công |
-| `payment.failed` | Payment Service | Booking Service | Thanh toán thất bại |
-| `tickets.generated` | Booking Service | Catalog Service, Notification Service | Vé đã được phát hành |
-| `booking.cancelled` | Booking Service | Catalog Service | Đơn hàng bị hủy (hết hạn hold) |
-| `booking.refund-requested` | Booking Service | Payment Service | Yêu cầu hoàn tiền (Saga compensation) |
-
-### 4.2. Event Schema (Ví dụ)
-
-```json
-// Payment Success Event
-{
-  "eventId": "uuid-v4",
-  "eventType": "PAYMENT_SUCCESS",
-  "timestamp": "2024-01-01T12:00:00Z",
-  "payload": {
-    "bookingId": "booking-uuid",
-    "transactionId": "txn-uuid",
-    "amount": 500000,
-    "paymentMethod": "VNPAY"
-  }
-}
-
-// Tickets Generated Event
-{
-  "eventId": "uuid-v4",
-  "eventType": "TICKETS_GENERATED",
-  "timestamp": "2024-01-01T12:00:05Z",
-  "payload": {
-    "bookingId": "booking-uuid",
-    "eventId": "event-uuid",
-    "tickets": [
-      {
-        "ticketId": "ticket-uuid-1",
-        "ticketClassId": "class-uuid",
-        "qrCodeData": "unique-qr-data-1"
-      }
-    ],
-    "customerEmail": "customer@email.com"
-  }
-}
+                                ┌────────────────────────────────────────────────┐
+                                │   CLIENT LAYER (Web React / Mobile Flutter)    │
+                                └───────────────────────┬────────────────────────┘
+                                                        │
+                                         ┌──────────────▼─────────────┐
+                                         │  REVERSE PROXY (Cloudflare)│
+                                         └──────────────┬─────────────┘
+                                                        │
+                                         ┌──────────────▼─────────────┐
+                                         │    API GATEWAY (Spring)    │
+                                         │(Routing / JWT / Rate Limit)│
+                                         └──────────────┬─────────────┘
+                                                        │
+                 ┌──────────────────────────────────────┼──────────────────────────────────────┐
+                 │                                      │                                      │
+   ┌─────────────▼─────────────┐          ┌─────────────▼─────────────┐          ┌─────────────▼─────────────┐
+   │       CONFIG SERVER       │          │     DISCOVERY SERVICE     │          │   MONITORING & TRACING    │
+   │   (Spring Cloud Config)   │          │   (Spring Cloud Eureka)   │          │ Prometheus/Grafana/Jaeger │
+   └───────────────────────────┘          └───────────────────────────┘          └───────────────────────────┘
+                 │                                      │                                      │
+ ┌───────────────┴──────────────────────────────────────┴──────────────────────────────────────┴───────────────┐
+ │                                              BUSINESS SERVICES                                              │
+ │                                                                                                             │
+ │ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌───────────────────┐  │
+ │ │ Auth Service │ │ User Service │ │ Catalog Svc  │ │ Booking Svc  │ │ Payment Svc  │ │   Queue Service   │  │
+ │ │ (Port 8081)  │ │ (Port 8082)  │ │ (Port 8083)  │ │ (Port 8084)  │ │ (Port 8085)  │ │   (Port 8087)     │  │
+ │ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └──────┬───────┘ └─────────┬─────────┘  │
+ │        │                │                │                │                │                   │            │
+ │ ┌──────▼───────┐ ┌──────▼───────┐ ┌──────▼───────┐ ┌──────▼───────┐ ┌──────▼───────┐           │            │
+ │ │postgres-auth │ │postgres-user │ │postgres-catlg│ │postgres-book │ │postgres-pay  │           │            │
+ │ │ (Port 5433)  │ │ (Port 5434)  │ │ (Port 5435)  │ │ (Port 5436)  │ │ (Port 5437)  │           │            │
+ │ └──────────────┘ └──────────────┘ └──────────────┘ └──────┬───────┘ └──────┬───────┘           │            │
+ │                                                           │                │                   │            │
+ │                                                           ▼                │                   │            │
+ │                                                    ┌─────────────┐         │                   │            │
+ │                                                    │    Redis    │◄────────┼───────────────────┘            │
+ │                                                    │ (Port 6379) │         │                                │
+ │                                                    └─────────────┘         │                                │
+ │                                                                            ▼                                │
+ │ ┌───────────────────┐                             ┌─────────────────────────────────┐                       │
+ │ │ Recommend Service │                             │          Apache Kafka           │                       │
+ │ │ (Python/FastAPI)  │                             │      (KRaft Mode - Port 9092)   │                       │
+ │ └───────────────────┘                             └────────────────┬────────────────┘                       │
+ │                                                                    │                                        │
+ │                                                           ┌────────▼────────┐                               │
+ │                                                           │Notification Svc │                               │
+ │                                                           │  (Port 8086)    │                               │
+ │                                                           └────────┬────────┘                               │
+ │                                                                    ▼                                        │
+ │                                                             ┌─────────────┐                                 │
+ │                                                             │   MongoDB   │                                 │
+ │                                                             │(Port 27017) │                                 │
+ │                                                             └─────────────┘                                 │
+ └─────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Bảo mật & Xác thực
+## 4. Chi Tiết Các Microservices
 
-### 5.1. JWT Flow
+> Toàn bộ các backend Java services được phát triển trên nền tảng **Java 21+** và **Spring Boot 4.1.1+**, tận dụng sức mạnh của **Virtual Threads (Project Loom)** và hệ sinh thái Spring Cloud hiện đại.
 
-```
-Customer                API Gateway              Auth Service
-   │                        │                        │
-   │── POST /auth/login ───►│── Forward ────────────►│
-   │                        │                        │── Validate credentials
-   │                        │◄── JWT Token ──────────│
-   │◄── JWT Token ──────────│                        │
-   │                        │                        │
-   │── GET /events ────────►│── Validate JWT ───────►│
-   │   (Bearer Token)       │◄── Token Valid ────────│
-   │                        │── Forward to Catalog──►│
-   │◄── Event List ─────────│                        │
-```
-
-### 5.2. Role-Based Access Control (RBAC)
-
-| Endpoint Pattern | ADMIN | ORGANIZER | CUSTOMER | PUBLIC |
-|-----------------|-------|-----------|----------|--------|
-| `POST /auth/**` | - | - | - | ✅ |
-| `GET /events/**` | ✅ | ✅ | ✅ | ✅ |
-| `POST /events` | ✅ | ✅ | ❌ | ❌ |
-| `POST /bookings` | ❌ | ❌ | ✅ | ❌ |
-| `POST /admin/**` | ✅ | ❌ | ❌ | ❌ |
-| `GET /organizer/reports` | ✅ | ✅ | ❌ | ❌ |
+| Service | Công nghệ | Cổng Host | Database | Trách nhiệm chính |
+| :--- | :--- | :--- | :--- | :--- |
+| **API Gateway** | Spring Cloud Gateway (Spring Boot 4.1.1+) | `8080` | - | Định tuyến request, xác thực JWT tập trung, Rate Limiting chống spam |
+| **Config Server** | Spring Cloud Config (Spring Boot 4.1.1+) | `8888` | Git / Local | Quản lý tập trung toàn bộ cấu hình `application.yml` của các service |
+| **Discovery Svc** | Spring Cloud Eureka (Spring Boot 4.1.1+) | `8761` | In-Memory | Đăng ký & phát hiện dịch vụ (Service Registration & Discovery), kiểm tra Health Check |
+| **Auth Service** | Java 21+ / Spring Boot 4.1.1+ + Security | `8081` | PostgreSQL (`5433`) | Đăng ký, đăng nhập, cấp Access/Refresh Token, phân quyền RBAC |
+| **User Service** | Java 21+ / Spring Boot 4.1.1+ + Data JPA | `8082` | PostgreSQL (`5434`) | Quản lý hồ sơ cá nhân, CCCD, thông tin doanh nghiệp/ngân hàng (JSONB) |
+| **Catalog Service** | Java 21+ / Spring Boot 4.1.1+ + Redis Cache | `8083` | PostgreSQL (`5435`) | Quản lý danh mục sự kiện, cấu hình hạng vé, tối ưu truy vấn bằng Cache |
+| **Booking Service** | Java 21+ / Spring Boot 4.1.1+ + Redis | `8084` | PostgreSQL (`5436`) | Giữ chỗ nguyên tử 10 phút, tạo đơn hàng, quản lý vé QR, auto-release |
+| **Payment Service** | Java 21+ / Spring Boot 4.1.1+ | `8085` | PostgreSQL (`5437`) | Tích hợp cổng VNPay Sandbox, kiểm tra checksum HMAC, xuất bản Kafka event |
+| **Queue Service** | Java 21+ / Spring Boot 4.1.1+ WebSocket + Redis | `8087` | Redis (`6379`) | Phòng chờ ảo real-time, xếp hàng bằng Sorted Set, quản lý Heartbeat 15s |
+| **Notification Svc**| Java 21+ / Spring Boot 4.1.1+ + JavaMail | `8086` | MongoDB (`27017`) | Nghe Kafka event, tạo QR code hình ảnh, gửi email vé điện tử, lưu log |
+| **Recommend Svc** | Python 3.11+ / FastAPI | `8088` | - | Thuật toán AI gợi ý sự kiện phù hợp cho người dùng |
 
 ---
 
-## 6. Deployment Architecture
+## 5. Kiến Trúc Dữ Liệu & Cách Ly (Database Isolation)
 
-### 6.1. Docker Compose (Development)
-
-```
-docker-compose.yml
-├── PostgreSQL (port 5432)
-├── MongoDB (port 27017)
-├── Redis (port 6379)
-├── Zookeeper (port 2181)
-├── Kafka Broker (port 9092)
-├── API Gateway (port 8080)
-├── Auth Service (port 8081)
-├── User Service (port 8082)
-├── Catalog Service (port 8083)
-├── Booking Service (port 8084)
-├── Payment Service (port 8085)
-└── Notification Service (port 8086)
-```
-
-### 6.2. Scaling Strategy (Production)
-
-| Service | Scaling | Lý do |
-|---------|---------|-------|
-| Booking Service | Horizontal (3-5 instances) | Chịu tải cao nhất khi mở bán |
-| Catalog Service | Horizontal (2-3 instances) + Redis Cache | Read-heavy service |
-| Payment Service | Horizontal (2-3 instances) | Đảm bảo throughput thanh toán |
-| Auth Service | Horizontal (2 instances) | Stateless, JWT tự xác thực |
-| Notification Service | Horizontal (2 instances) | Kafka consumer group tự balance |
+Tuân thủ nghiêm ngặt mô hình **Database per Service**:
+1. **5 Container PostgreSQL độc lập về phần cứng:** Mỗi service chạy 1 container riêng (`postgres-auth`, `postgres-user`, `postgres-catalog`, `postgres-booking`, `postgres-payment`).
+2. **Cấu hình động qua `.env`:** Tên DB, User, Password, Port và Host đều được cấu hình qua file `.env`. Khi chuyển từ Localhost lên VPS hay Cloud RDS, **không cần sửa một dòng code nào**.
+3. **Database Migration bằng Flyway:** Các câu lệnh tạo bảng, tạo index và kích hoạt extension (`uuid-ossp`, `pgcrypto`) được quản lý bằng Flyway trong mã nguồn backend, giúp hệ thống 100% độc lập với môi trường Docker bên ngoài.
 
 ---
 
-> 📄 Xem thêm: [Database Schema](database-schema.md) | [API Design](api-design.md) | [Technical Flows](technical-flows.md)
+## 6. Apache Kafka Events & Saga Choreography
+
+```
+                    ┌──────────────────────────────────────────────┐
+                    │                KAFKA BROKER                  │
+                    │                                              │
+                    │  ┌─────────────────┐  ┌────────────────────┐ │
+ Payment ──────────►│  │ payment.success │  │ payment.failed     │ │──────────► Booking
+ Service            │  └─────────────────┘  └────────────────────┘ │           Service
+                    │                                              │
+                    │  ┌─────────────────┐  ┌────────────────────┐ │
+ Booking ──────────►│  │tickets.generated│  │ booking.cancelled  │ │──────────► Catalog
+ Service            │  └─────────────────┘  └────────────────────┘ │           Service
+                    │                                              │
+                    │  ┌─────────────────┐                         │
+ Booking ──────────►│  │tickets.generated│                         │──────────► Notification
+ Service            │  └─────────────────┘                         │           Service
+                    │                                              │
+                    │  ┌──────────────────────┐                    │
+ Booking ──────────►│  │booking.refund-request│                    │──────────► Payment
+ Service            │  └──────────────────────┘                    │           Service
+                    │                                              │
+                    └──────────────────────────────────────────────┘
+```
+
+* **`payment.success`:** Payment Service bắn event sau khi nhận IPN thành công từ VNPay ➔ Booking Service cập nhật đơn `PAID` và vé `ISSUED`.
+* **`tickets.generated`:** Booking Service bắn event ➔ Catalog Service trừ vĩnh viễn `available_quantity`, Notification Service gửi email vé kèm mã QR.
+* **`booking.refund-requested` (Saga Rollback):** Nếu sau khi thanh toán mà Booking Service bị lỗi sinh vé ➔ Yêu cầu Payment Service tự động gọi VNPay hoàn tiền cho khách.
+* **Idempotent Consumers:** Mọi Kafka consumer đều kiểm tra trạng thái trước khi thực hiện để đảm bảo nếu nhận trùng event (do network retry) cũng không bị trừ 2 lần vé hay hoàn tiền 2 lần.
+
+---
+
+## 7. Giám Sát Hệ Thống (Observability)
+
+* **Prometheus & Grafana:** Thu thập số liệu RPS, tỷ lệ lỗi HTTP 5xx, độ trễ p95/p99, dung lượng RAM/CPU của từng container, số người đang đợi trong phòng chờ ảo.
+* **OpenTelemetry & Jaeger / Zipkin:** Truy vết phân tán (Distributed Tracing). Mỗi request được gắn một `TraceId` duy nhất để theo dõi toàn bộ hành trình từ Gateway qua các service và Kafka.
+
+---
+
+> 📄 Xem tiếp:
+> * [Sơ đồ kiến trúc Mermaid](architecture-diagrams.md)
+> * [Thiết kế cơ sở dữ liệu chi tiết](database-schema.md)
+> * [Thiết kế phòng chờ ảo](virtual-waiting-room.md)
+> * [Luồng kỹ thuật chi tiết](technical-flows.md)
+> * [Đặc tả API](api-design.md)

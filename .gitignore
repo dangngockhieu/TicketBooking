@@ -76,3 +76,6 @@ yarn-error.log*
 
 # Redis dump
 dump.rdb
+
+# Internal / Private Docs
+docs/development-plan.md
