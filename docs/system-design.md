@@ -197,6 +197,29 @@ Tuân thủ nghiêm ngặt mô hình **Database per Service**:
 
 ---
 
+## 8. Kiến Trúc Bảo Mật Zero Trust (Token Relay & Asymmetric Keys)
+
+Hệ thống áp dụng mô hình bảo mật **Zero Trust (Defense-in-Depth - Không tin tưởng ngầm định bất kỳ thành phần nào, kể cả trong mạng nội bộ)**:
+
+```
+[Client] ──(Bearer JWT)──► [API Gateway] ──(Token Relay: Giữ nguyên Bearer JWT)──► [Microservices]
+                                │                                                        │
+                      (Kiểm tra sơ bộ/Rate Limit)                              (Tự xác thực độc lập)
+                                │                                                        │
+                      (Chỉ giữ Public Key)                                     (Chỉ giữ Public Key)
+```
+
+1. **Khóa bất đối xứng (RSA Asymmetric Keys / JWKS):**
+   * **`auth-service`**: Nơi duy nhất nắm giữ **Private Key** để ký (sign) Access Token khi người dùng đăng nhập.
+   * **`api-gateway` & Microservices con**: Chỉ nắm giữ **Public Key** (hoặc đồng bộ qua endpoint JWKS `/.well-known/jwks.json` có in-memory caching). Public key chỉ có thể giải mã và xác thực chữ ký, hoàn toàn không thể giả mạo để tạo token mới.
+2. **Cơ chế Token Relay (Chuyển tiếp Token):**
+   * API Gateway không bóc tách dữ liệu thành header trần (`X-User-Id`), mà chuyển tiếp nguyên xi chuỗi Bearer JWT qua các service nội bộ.
+   * Mỗi service con (`booking-service`, `user-service`,...) tự giải mã chữ ký bằng Public Key và tự kiểm tra quyền hạn (`@PreAuthorize`), triệt tiêu hoàn toàn nguy cơ giả mạo request nội bộ (Internal Header Spoofing).
+3. **Bộ xử lý ngoại lệ đồng nhất (`common-library`):**
+   * Các ngoại lệ bảo mật (`UnauthorizedException`, `InvalidTokenException`, `ForbiddenException`) được chuẩn hóa và bắt tự động bởi `GlobalExceptionHandler`, trả về response chuẩn định dạng số (`status != 0`).
+
+---
+
 > 📄 Xem tiếp:
 > * [Sơ đồ kiến trúc Mermaid](architecture-diagrams.md)
 > * [Thiết kế cơ sở dữ liệu chi tiết](database-schema.md)

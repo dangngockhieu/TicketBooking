@@ -11,28 +11,29 @@
 https://api.ticketbooking.vn/v1
 ```
 
-### Response Format
+### Response Format (Chuẩn MoMo)
 
-**Success Response:**
+**Success Response (`status: 0`):**
 ```json
 {
-  "success": true,
+  "status": 0,
+  "message": "Thành công",
   "data": { ... },
-  "message": "Operation successful",
-  "timestamp": "2024-01-01T12:00:00Z"
+  "responseTime": 1721720663942
 }
 ```
 
-**Error Response:**
+**Error Response (`status != 0`):**
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "TICKET_CLASS_SOLD_OUT",
-    "message": "Hạng vé VIP đã hết",
-    "details": { ... }
+  "status": 400,
+  "message": "Validation failed.",
+  "data": null,
+  "errors": {
+    "email": "Email không đúng định dạng",
+    "password": "Mật khẩu phải từ 8 ký tự"
   },
-  "timestamp": "2024-01-01T12:00:00Z"
+  "responseTime": 1721720663942
 }
 ```
 
