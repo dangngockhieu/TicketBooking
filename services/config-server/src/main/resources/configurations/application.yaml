@@ -1,0 +1,49 @@
+# TICKETBOOKING - CẤU HÌNH DÙNG CHUNG CHO TOÀN BỘ MICROSERVICES & CONFIG SERVER
+
+# 1. Kích hoạt Virtual Threads (Java 21+ Project Loom)
+spring:
+  threads:
+    virtual:
+      enabled: true
+
+  # 2. Định dạng JSON & Thời gian chuẩn hóa
+  jackson:
+    time-zone: Asia/Ho_Chi_Minh
+    date-format: yyyy-MM-dd HH:mm:ss
+    default-property-inclusion: non_null
+
+# 3. Đăng ký & Nhận diện dịch vụ qua Eureka Server
+eureka:
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${random.value}
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+# 4. Giám sát & Đo kiểm hệ thống (Spring Boot Actuator)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,refresh
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+# 5. Tối ưu nén mạng GZIP
+server:
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/xml,text/plain
+    min-response-size: 1024
+
+# 6. Định dạng Log tập trung (Màu sắc, Service Name, Trace ID)
+logging:
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss}){faint} %clr(%5p) %clr([${spring.application.name:-},%X{traceId:-}]){yellow} %clr(%-40.40logger{39}){cyan} : %m%n"
+  level:
+    com.ticketbooking: INFO
+    org.springframework.web: INFO

@@ -1,0 +1,14 @@
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native
+  cloud:
+    config:
+      server:
+        bootstrap: true # Tự động nạp cấu hình chung từ classpath:/configurations/application.yaml
+        native:
+          search-locations: classpath:/configurations
