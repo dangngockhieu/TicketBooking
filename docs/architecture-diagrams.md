@@ -17,28 +17,28 @@ flowchart TD
         CF["☁️ Reverse Proxy<br/>(Cloudflare / Nginx)<br/>DDoS Protection | SSL Termination | Caching"]
     end
 
-    subgraph GatewayLayer["API Gateway Layer"]
-        GW["🚪 API Gateway<br/>(Spring Cloud Gateway - Spring Boot 4.1.1+)<br/>JWT Validation | Rate Limiting | Routing"]
+    subgraph GatewayLayer["API Gateway Layer — Zero Trust Token Relay"]
+        GW["🚪 API Gateway<br/>(Spring Cloud Gateway - Spring Boot 4.1.1+)<br/>JWT Validation (Public Key) | Rate Limiting | Token Relay"]
     end
 
     subgraph InfraServices["Infrastructure Support Services"]
-        EUREKA["🔍 Discovery Service<br/>(Spring Cloud Eureka)<br/>Service Registry & Health"]
-        CONFIG["⚙️ Config Server<br/>(Spring Cloud Config)<br/>Centralized Git Configuration"]
+        CONFIG["⚙️ Config Server<br/>(Spring Cloud Config - :8888)<br/>Centralized Configuration<br/>bootstrap: true (tự nạp cấu hình chung)"]
+        EUREKA["🔍 Discovery Service<br/>(Spring Cloud Eureka - :8761)<br/>Service Registry & Health<br/>(Standalone — Không phụ thuộc Config Server)"]
         OBS["📈 Observability & Tracing<br/>(Prometheus / Grafana / Jaeger)<br/>Metrics & Distributed Tracing"]
     end
 
-    subgraph BusinessServices["Business Microservices Layer (Java 21+ / Spring Boot 4.1.1+)"]
-        AUTH["🔐 Auth Service<br/>(Spring Boot 4.1.1+)<br/>JWT & RBAC"]
-        USER["👤 User Service<br/>(Spring Boot 4.1.1+)<br/>Profiles & KYC"]
-        CATALOG["📋 Catalog Service<br/>(Spring Boot 4.1.1+)<br/>Events & Ticket Classes"]
-        BOOKING["🎫 Booking Service<br/>(Spring Boot 4.1.1+)<br/>Core Order & Seat Holding"]
-        PAYMENT["💳 Payment Service<br/>(Spring Boot 4.1.1+)<br/>VNPay Sandbox"]
-        QUEUE["🚦 Queue Service<br/>(Spring Boot 4.1.1+ WebSocket)<br/>Virtual Waiting Room"]
-        NOTIF["📧 Notification Service<br/>(Spring Boot 4.1.1+)<br/>Email & QR Code Generation"]
-        RECOMMEND["🤖 Recommend Service<br/>(Python / FastAPI)<br/>AI Event Recommendation"]
+    subgraph BusinessServices["Business Microservices Layer (Java 21+ / Spring Boot 4.1.1+)<br/>Mỗi service tự xác thực JWT bằng Public Key (Zero Trust)"]
+        AUTH["🔐 Auth Service (:8081)<br/>JWT Issuer (Private Key)<br/>RBAC & Token Management"]
+        USER["👤 User Service (:8082)<br/>Profiles & KYC"]
+        CATALOG["📋 Catalog Service (:8083)<br/>Events & Ticket Classes"]
+        BOOKING["🎫 Booking Service (:8084)<br/>Core Order & Seat Holding"]
+        PAYMENT["💳 Payment Service (:8085)<br/>VNPay Sandbox"]
+        QUEUE["🚦 Queue Service (:8087)<br/>Virtual Waiting Room (WebSocket)"]
+        NOTIF["📧 Notification Service (:8086)<br/>Email & QR Code Generation"]
+        RECOMMEND["🤖 Recommend Service (:8088)<br/>(Python / FastAPI)<br/>AI Event Recommendation"]
     end
 
-    subgraph DataLayer["Data Layer (Physical Isolation)"]
+    subgraph DataLayer["Data Layer (Physical Isolation — Database per Service)"]
         PG_AUTH[("🐘 postgres-auth<br/>:5433")]
         PG_USER[("🐘 postgres-user<br/>:5434")]
         PG_CATALOG[("🐘 postgres-catalog<br/>:5435")]
@@ -62,28 +62,37 @@ flowchart TD
     MOB --> CF
     CF --> GW
 
-    GW --> EUREKA
-    GW --> AUTH
-    GW --> USER
-    GW --> CATALOG
-    GW --> BOOKING
-    GW --> PAYMENT
-    GW --> QUEUE
-    GW --> RECOMMEND
+    %% Gateway forwards Bearer JWT (Token Relay) to all business services
+    GW -- "Bearer JWT<br/>(Token Relay)" --> AUTH
+    GW -- "Bearer JWT<br/>(Token Relay)" --> USER
+    GW -- "Bearer JWT<br/>(Token Relay)" --> CATALOG
+    GW -- "Bearer JWT<br/>(Token Relay)" --> BOOKING
+    GW -- "Bearer JWT<br/>(Token Relay)" --> PAYMENT
+    GW -- "Bearer JWT<br/>(Token Relay)" --> QUEUE
+    GW -- "Bearer JWT<br/>(Token Relay)" --> RECOMMEND
 
+    %% Config-First: Business services pull config from Config Server at startup
+    AUTH -- "Pull Config<br/>(bootstrap)" --> CONFIG
+    USER -- "Pull Config<br/>(bootstrap)" --> CONFIG
+    CATALOG -- "Pull Config<br/>(bootstrap)" --> CONFIG
+    BOOKING -- "Pull Config<br/>(bootstrap)" --> CONFIG
+    PAYMENT -- "Pull Config<br/>(bootstrap)" --> CONFIG
+    QUEUE -- "Pull Config<br/>(bootstrap)" --> CONFIG
+    NOTIF -- "Pull Config<br/>(bootstrap)" --> CONFIG
+    GW -- "Pull Config<br/>(bootstrap)" --> CONFIG
+
+    %% All services register with Eureka
+    GW --> EUREKA
     AUTH --> EUREKA
     USER --> EUREKA
     CATALOG --> EUREKA
     BOOKING --> EUREKA
     PAYMENT --> EUREKA
     QUEUE --> EUREKA
+    NOTIF --> EUREKA
+    CONFIG --> EUREKA
 
-    AUTH --> CONFIG
-    USER --> CONFIG
-    CATALOG --> CONFIG
-    BOOKING --> CONFIG
-    PAYMENT --> CONFIG
-
+    %% Data connections
     AUTH --> PG_AUTH
     USER --> PG_USER
     CATALOG --> PG_CATALOG
@@ -93,6 +102,7 @@ flowchart TD
     QUEUE --> REDIS
     NOTIF --> MONGO
 
+    %% Kafka event-driven
     PAYMENT --> KAFKA
     BOOKING --> KAFKA
     KAFKA --> BOOKING
@@ -100,16 +110,19 @@ flowchart TD
     KAFKA --> NOTIF
     KAFKA_UI --> KAFKA
 
+    %% External integrations
     PAYMENT --> VNPAY
     NOTIF --> SMTP
 
-    OBS -.-> GW & AUTH & BOOKING & PAYMENT & KAFKA
+    OBS -.- GW & AUTH & BOOKING & PAYMENT & KAFKA
 
     style BOOKING fill:#ff6b6b,color:#fff
     style QUEUE fill:#f39c12,color:#fff
     style KAFKA fill:#231f20,color:#fff
     style REDIS fill:#dc382d,color:#fff
     style RECOMMEND fill:#3498db,color:#fff
+    style CONFIG fill:#27ae60,color:#fff
+    style EUREKA fill:#8e44ad,color:#fff
 ```
 
 ---
@@ -125,8 +138,11 @@ sequenceDiagram
     participant Redis as Redis (:6379)
     participant DB as postgres-booking (:5436)
 
-    Customer->>GW: POST /bookings (2 vé VIP)
-    GW->>BS: Forward request
+    Customer->>GW: POST /bookings (2 vé VIP) + Bearer JWT
+    Note over GW: Xác thực JWT bằng Public Key<br/>Rate Limiting check
+    GW->>BS: Token Relay — Forward Bearer JWT nguyên xi
+
+    Note over BS: Tự xác thực JWT bằng Public Key<br/>Trích xuất userId, roles từ claims
 
     BS->>CS: GET /ticket-classes/{id}
     CS-->>BS: available_quantity = 100
@@ -155,7 +171,88 @@ sequenceDiagram
 
 ---
 
-## 3. Payment & Event-Driven Flow (Kafka Choreography)
+## 3. Zero Trust Security Flow (Token Relay & Asymmetric Keys)
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant GW as API Gateway<br/>(Public Key only)
+    participant Auth as Auth Service<br/>(Private Key + Public Key)
+    participant Svc as Any Business Service<br/>(Public Key only)
+
+    Note over Auth: Nơi DUY NHẤT giữ Private Key<br/>để ký (sign) JWT
+
+    %% Login Flow
+    rect rgb(230, 245, 255)
+        Note over Client,Auth: 🔑 Authentication Flow (Đăng nhập)
+        Client->>GW: POST /auth/login (email, password)
+        GW->>Auth: Forward request (public endpoint — no JWT needed)
+        Auth->>Auth: Xác thực credentials<br/>Ký JWT bằng Private Key (RSA)
+        Auth-->>GW: 200 OK { accessToken, refreshToken }
+        GW-->>Client: Trả về tokens
+    end
+
+    %% Authenticated Request Flow
+    rect rgb(255, 245, 230)
+        Note over Client,Svc: 🛡️ Zero Trust Request Flow (Token Relay)
+        Client->>GW: GET /bookings + Authorization: Bearer {JWT}
+        GW->>GW: Xác thực JWT bằng Public Key<br/>(Kiểm tra chữ ký + hết hạn chưa)
+        Note over GW: ✅ JWT hợp lệ → Token Relay<br/>Chuyển tiếp nguyên xi Bearer JWT<br/>❌ KHÔNG bóc tách thành X-User-Id header
+        GW->>Svc: Forward Bearer JWT nguyên xi
+        Svc->>Svc: TỰ xác thực JWT bằng Public Key<br/>Trích xuất userId, roles từ claims<br/>Kiểm tra @PreAuthorize
+        Svc-->>GW: 200 OK { data }
+        GW-->>Client: Response
+    end
+
+    %% Internal Spoofing Prevention
+    rect rgb(255, 230, 230)
+        Note over Client,Svc: 🚫 Tại sao KHÔNG dùng X-User-Id header?
+        Note over GW,Svc: Nếu dùng header X-User-Id:<br/>Kẻ tấn công bypass Gateway → gửi thẳng<br/>X-User-Id: admin_uuid → chiếm quyền!<br/><br/>Với Token Relay:<br/>Không có Private Key → Không thể giả JWT<br/>→ Zero Trust: TRIỆT TIÊU header spoofing
+    end
+```
+
+---
+
+## 4. Config-First Boot Sequence (Thứ Tự Khởi Động Hệ Thống)
+
+```mermaid
+sequenceDiagram
+    participant Eureka as Discovery Service<br/>(:8761 — Standalone)
+    participant Config as Config Server<br/>(:8888 — bootstrap: true)
+    participant Auth as Auth Service<br/>(:8081)
+    participant GW as API Gateway<br/>(:8080)
+    participant Others as Other Services
+
+    Note over Eureka: 🟢 KHỞI ĐỘNG ĐẦU TIÊN<br/>Hoàn toàn độc lập<br/>Không cần Config Server
+
+    rect rgb(230, 255, 230)
+        Note over Eureka,Config: Bước 1: Infrastructure Services
+        Eureka->>Eureka: Start với config nội bộ<br/>application.yaml riêng
+        Config->>Config: Start với bootstrap: true<br/>Tự nạp configurations/application.yaml<br/>cho chính mình (Virtual Threads, Eureka, Actuator...)
+        Config->>Eureka: Đăng ký vào Service Registry
+    end
+
+    rect rgb(230, 245, 255)
+        Note over Auth,Others: Bước 2: Business Services (Sau khi Config Server sẵn sàng)
+        Auth->>Config: Pull config (auth-service.yaml + application.yaml)
+        Config-->>Auth: DB connection, JWT config, Eureka, Virtual Threads...
+        Auth->>Eureka: Đăng ký vào Service Registry
+
+        GW->>Config: Pull config (gateway.yaml + application.yaml)
+        Config-->>GW: Routes, Rate Limit, JWT Public Key config...
+        GW->>Eureka: Đăng ký vào Service Registry
+
+        Others->>Config: Pull config ({service-name}.yaml + application.yaml)
+        Config-->>Others: Service-specific + shared configuration
+        Others->>Eureka: Đăng ký vào Service Registry
+    end
+
+    Note over Eureka,Others: ✅ Hệ thống sẵn sàng phục vụ request
+```
+
+---
+
+## 5. Payment & Event-Driven Flow (Kafka Choreography)
 
 ```mermaid
 sequenceDiagram
@@ -193,7 +290,7 @@ sequenceDiagram
 
 ---
 
-## 4. Saga Compensation Flow (Hoàn tiền khi lỗi hệ thống)
+## 6. Saga Compensation Flow (Hoàn tiền khi lỗi hệ thống)
 
 ```mermaid
 stateDiagram-v2
@@ -221,7 +318,7 @@ stateDiagram-v2
 
 ---
 
-## 5. Database Relationships (ER Diagram)
+## 7. Database Relationships (ER Diagram)
 
 ```mermaid
 erDiagram
@@ -310,11 +407,16 @@ erDiagram
 
 ---
 
-## 6. Deployment Architecture (Docker Compose Mới — 5 Postgres Độc Lập)
+## 8. Deployment Architecture (Docker Compose — 5 Postgres Độc Lập)
 
 ```mermaid
 flowchart LR
     subgraph HostEnvironment["Docker Host (Localhost / VPS)"]
+        subgraph InfraLayer["Infrastructure Layer"]
+            EUREKA["🔍 Discovery<br/>:8761<br/>(Standalone)"]
+            CONFIG["⚙️ Config Server<br/>:8888<br/>(bootstrap: true)"]
+        end
+
         subgraph Databases["5 Cụm Database Độc Lập (Physical Isolation)"]
             PG_A["🐘 postgres-auth<br/>Host: 5433"]
             PG_U["🐘 postgres-user<br/>Host: 5434"]
@@ -330,9 +432,9 @@ flowchart LR
             KAFKA_UI["🖥️ Kafka UI<br/>Host: 8090"]
         end
 
-        subgraph ApplicationServices["Application Microservices"]
-            GW["🚪 Gateway<br/>:8080"]
-            AUTH["🔐 Auth<br/>:8081"]
+        subgraph ApplicationServices["Application Microservices (Zero Trust — JWT Verification)"]
+            GW["🚪 Gateway<br/>:8080<br/>(Token Relay)"]
+            AUTH["🔐 Auth<br/>:8081<br/>(JWT Issuer)"]
             USER["👤 User<br/>:8082"]
             CATALOG["📋 Catalog<br/>:8083"]
             BOOKING["🎫 Booking<br/>:8084"]
@@ -343,7 +445,14 @@ flowchart LR
         end
     end
 
-    GW --> AUTH & USER & CATALOG & BOOKING & PAYMENT & QUEUE & REC
+    %% Config-First: services pull config
+    AUTH & USER & CATALOG & BOOKING & PAYMENT & QUEUE & NOTIF & GW --> CONFIG
+    CONFIG --> EUREKA
+
+    %% Gateway routes with Token Relay
+    GW -- "Token Relay" --> AUTH & USER & CATALOG & BOOKING & PAYMENT & QUEUE & REC
+
+    %% Data layer
     AUTH --> PG_A
     USER --> PG_U
     CATALOG --> PG_C
@@ -359,11 +468,13 @@ flowchart LR
     style QUEUE fill:#f39c12,color:#fff
     style KAFKA fill:#231f20,color:#fff
     style REDIS fill:#dc382d,color:#fff
+    style CONFIG fill:#27ae60,color:#fff
+    style EUREKA fill:#8e44ad,color:#fff
 ```
 
 ---
 
-## 7. Use Case Diagram Tổng Quan
+## 9. Use Case Diagram Tổng Quan
 
 ```mermaid
 flowchart TD
@@ -409,10 +520,10 @@ flowchart TD
     CUST --> C1 & C2 & C3 & C4 & C5 & C6 & C7
     SYS --> S1 & S2 & S3 & S4
 
-    C5 -.->|"trigger"| S1
-    C4 -.->|"trigger"| S2
-    C6 -.->|"trigger"| S3
-    C6 -.->|"on failure"| S4
+    C5 -.-|"trigger"| S1
+    C4 -.-|"trigger"| S2
+    C6 -.-|"trigger"| S3
+    C6 -.-|"on failure"| S4
 ```
 
 ---

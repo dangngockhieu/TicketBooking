@@ -1,0 +1,37 @@
+# ==============================================================================
+# AUTH SERVICE CONFIGURATION (PHÂN PHỐI BỞI CONFIG SERVER)
+# ==============================================================================
+server:
+  port: 8081
+
+spring:
+  # Cấu hình kết nối PostgreSQL (Container postgres-auth :5433)
+  datasource:
+    url: jdbc:postgresql://${AUTH_DB_HOST}:${AUTH_DB_PORT}/${AUTH_DB_NAME}
+    username: ${AUTH_DB_USER}
+    password: ${AUTH_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  # JPA & Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: validate # Flyway chịu trách nhiệm tạo bảng, JPA chỉ kiểm tra
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: Asia/Ho_Chi_Minh
+
+  # Flyway Database Migration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+# Cấu hình Token JWT (Nạp trực tiếp từ biến môi trường .env)
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiration-seconds: ${JWT_ACCESS_TOKEN_EXPIRATION_SECONDS}
+  refresh-token-expiration-seconds: ${JWT_REFRESH_TOKEN_EXPIRATION_SECONDS}
