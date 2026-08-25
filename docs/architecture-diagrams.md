@@ -1,4 +1,4 @@
-# 📊 Architecture Diagrams — TicketBooking
+﻿# 📊 Architecture Diagrams — TicketBooking
 
 > Sơ đồ kiến trúc hệ thống sử dụng Mermaid
 
@@ -32,7 +32,7 @@ flowchart TD
         USER["👤 User Service (:8082)<br/>Profiles & KYC"]
         CATALOG["📋 Catalog Service (:8083)<br/>Events & Ticket Classes"]
         BOOKING["🎫 Booking Service (:8084)<br/>Core Order & Seat Holding"]
-        PAYMENT["💳 Payment Service (:8085)<br/>VNPay Sandbox"]
+        PAYMENT["💳 Payment Service (:8085)<br/>MoMo Payment Gateway"]
         QUEUE["🚦 Queue Service (:8087)<br/>Virtual Waiting Room (WebSocket)"]
         NOTIF["📧 Notification Service (:8086)<br/>Email & QR Code Generation"]
         RECOMMEND["🤖 Recommend Service (:8088)<br/>(Python / FastAPI)<br/>AI Event Recommendation"]
@@ -54,7 +54,7 @@ flowchart TD
     end
 
     subgraph External["External Services"]
-        VNPAY["💰 VNPay Gateway"]
+        VNPAY["💰 MoMo Gateway"]
         SMTP["📬 SMTP Mail Server"]
     end
 
@@ -111,7 +111,7 @@ flowchart TD
     KAFKA_UI --> KAFKA
 
     %% External integrations
-    PAYMENT --> VNPAY
+    PAYMENT --> MOMO
     NOTIF --> SMTP
 
     OBS -.- GW & AUTH & BOOKING & PAYMENT & KAFKA
@@ -157,7 +157,7 @@ sequenceDiagram
     BS->>DB: INSERT 2 tickets (status: LOCKED)
 
     BS-->>GW: 201 Created (paymentUrl, expiredAt)
-    GW-->>Customer: Trả về trang thanh toán VNPay
+    GW-->>Customer: Trả về trang thanh toán Momo
 
     Note over Redis: ⏰ 10 phút sau...
     
@@ -258,19 +258,19 @@ sequenceDiagram
 sequenceDiagram
     actor Customer
     participant PS as Payment Service
-    participant VNPay as Cổng VNPay Sandbox
+    participant MoMo as Cổng MoMo Payment Gateway
     participant Kafka as Kafka (:9092)
     participant BS as Booking Service
     participant CS as Catalog Service
     participant NS as Notification Service
 
     Customer->>PS: POST /payments/initiate
-    PS-->>Customer: paymentUrl (Redirect sang VNPay)
+    PS-->>Customer: paymentUrl (Redirect sang MoMo)
 
-    Customer->>VNPay: Thanh toán online thành công
-    VNPay->>PS: IPN Callback (Instant Payment Notification)
+    Customer->>MoMo: Thanh toán online thành công
+    MoMo->>PS: IPN Callback (server-to-server)
 
-    PS->>PS: Verify checksum HMAC-SHA512 & Save transaction (SUCCESS)
+    PS->>PS: Verify signature HMAC-SHA256 & Save transaction (SUCCESS)
     PS->>Kafka: Publish event payment.success
 
     Kafka->>BS: Consume payment.success
@@ -302,17 +302,17 @@ stateDiagram-v2
     Processing --> Completed: Tickets issued thành công (Happy path)
     Processing --> Compensating: ❌ Lỗi khi sinh vé (DB lỗi/Timeout)
 
-    Compensating --> Refunded: VNPay Refund thành công
+    Compensating --> Refunded: MoMo Refund thành công
 
     Completed --> [*]
     Cancelled --> [*]
     Refunded --> [*]
 
     note right of Compensating
-        1. Booking Service bắn event booking.refund-requested
-        2. Payment Service gọi API hoàn tiền của VNPay
-        3. Payment Service cập nhật transaction = REFUNDED
-        4. Booking Service cập nhật booking = REFUNDED & nhả vé
+        1. Booking Service bắn event booking.refund-requested
+        2. Payment Service gọi API hoàn tiền của MoMo
+        3. Payment Service cập nhật transaction = REFUNDED
+        4. Booking Service cập nhật booking = REFUNDED & nhả vé
     end note
 ```
 

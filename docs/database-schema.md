@@ -1,4 +1,4 @@
-# 🗄 Database Schema — TicketBooking
+﻿# 🗄 Database Schema — TicketBooking
 
 > Thiết kế cơ sở dữ liệu chi tiết cho từng Microservice
 
@@ -27,7 +27,7 @@
 | `email` | `VARCHAR(255)` | **UNIQUE**, NOT NULL | Email đăng nhập |
 | `password_hash` | `VARCHAR(255)` | NOT NULL | Mật khẩu đã hash (BCrypt) |
 | `role` | `ENUM('ADMIN','ORGANIZER','CUSTOMER')` | NOT NULL | Vai trò |
-| `status` | `ENUM('ACTIVE','LOCKED','PENDING')` | NOT NULL, DEFAULT 'ACTIVE' | Trạng thái tài khoản |
+| `status` | `ENUM('ACTIVE','LOCKED','PENDING')` | NOT NULL, DEFAULT 'PENDING' 🆕 | Trạng thái tài khoản |
 | `created_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày tạo |
 | `updated_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày cập nhật |
 
@@ -37,13 +37,33 @@ CREATE TABLE accounts (
     email         VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role          VARCHAR(20)  NOT NULL CHECK (role IN ('ADMIN', 'ORGANIZER', 'CUSTOMER')),
-    status        VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'LOCKED', 'PENDING')),
+    status        VARCHAR(20)  NOT NULL DEFAULT 'PENDING' CHECK (status IN ('ACTIVE', 'LOCKED', 'PENDING')),
     created_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_accounts_email ON accounts(email);
 CREATE INDEX idx_accounts_role_status ON accounts(role, status);
+```
+
+> `status` mặc định là **`PENDING`**, nhưng **chỉ áp dụng cho `CUSTOMER` tự đăng ký** qua `POST /auth/register` (chờ xác thực email OTP, xem bên dưới).
+>
+> **`ORGANIZER` không đi qua `PENDING`.** Organizer không tự đăng ký nên không có bước "chờ duyệt" ở trạng thái tài khoản. Admin tạo tài khoản Organizer trực tiếp qua `POST /admin/organizers` với `status = ACTIVE` ngay (đã thẩm định giấy phép ngoài hệ thống trước đó) — xem `technical-flows.md` §0.5 và `api-design.md` §1.5. Xem luồng đầy đủ ở `technical-flows.md`.
+
+### Redis Keys — Email Verification (Auth Service) 🆕
+
+> Không tạo bảng SQL riêng cho OTP vì bản chất là dữ liệu tạm thời, tự hết hạn — dùng Redis TTL thay vì cột `expires_at` + job dọn dẹp.
+
+```
+Key:    email_verify:{accountId}
+Type:   String
+Value:  "482913"                      # OTP 6 số
+TTL:    300 seconds (5 phút)
+
+Key:    email_verify_cooldown:{accountId}
+Type:   String
+Value:  "1"
+TTL:    60 seconds                    # chống spam nút "Gửi lại mã"
 ```
 
 ---
@@ -127,27 +147,33 @@ CREATE TABLE categories (
 | `sale_start_time` | `TIMESTAMP` | | Thời gian mở bán vé |
 | `sale_end_time` | `TIMESTAMP` | | Thời gian đóng bán vé |
 | `status` | `ENUM` | NOT NULL, DEFAULT 'DRAFT' | Trạng thái sự kiện |
+| `commission_rate` | `DECIMAL(5,4)` | NOT NULL, DEFAULT 0.05 | Tỷ lệ hoa hồng nền tảng (0..1), mặc định 5% |
+| `flat_fee_per_ticket` | `DECIMAL(15,2)` | NOT NULL, DEFAULT 3000 | Phí cố định mỗi vé (VND), mặc định 3.000đ |
 | `created_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày tạo |
 | `updated_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày cập nhật |
 
+> `commission_rate`/`flat_fee_per_ticket` chỉ ADMIN sửa được (`PATCH /admin/events/{id}/commission`), dùng để tính phí nền tảng khi tổng hợp báo cáo doanh thu và ví Organizer — xem `technical-flows.md §4b`, `api-design.md §6.4/§7.1`. Vé giá 0đ luôn miễn phí hoàn toàn (không tính `flat_fee_per_ticket`), tính ở tầng ứng dụng, không phải constraint DB.
+
 ```sql
 CREATE TABLE events (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    category_id     UUID         REFERENCES categories(id),
-    organizer_id    UUID         NOT NULL,  -- Soft Key → Auth Service
-    title           VARCHAR(500) NOT NULL,
-    description     TEXT,
-    location        VARCHAR(500) NOT NULL,
-    venue_name      VARCHAR(255),
-    banner_url      VARCHAR(500),
-    start_time      TIMESTAMP    NOT NULL,
-    end_time        TIMESTAMP    NOT NULL,
-    sale_start_time TIMESTAMP,
-    sale_end_time   TIMESTAMP,
-    status          VARCHAR(20)  NOT NULL DEFAULT 'DRAFT'
-                    CHECK (status IN ('DRAFT', 'PUBLISHED', 'CANCELLED', 'COMPLETED')),
-    created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMP    NOT NULL DEFAULT NOW()
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category_id          UUID         REFERENCES categories(id),
+    organizer_id         UUID         NOT NULL,  -- Soft Key → Auth Service
+    title                VARCHAR(500) NOT NULL,
+    description          TEXT,
+    location             VARCHAR(500) NOT NULL,
+    venue_name           VARCHAR(255),
+    banner_url           VARCHAR(500),
+    start_time           TIMESTAMP    NOT NULL,
+    end_time             TIMESTAMP    NOT NULL,
+    sale_start_time      TIMESTAMP,
+    sale_end_time        TIMESTAMP,
+    status               VARCHAR(20)    NOT NULL DEFAULT 'DRAFT'
+                         CHECK (status IN ('DRAFT', 'PUBLISHED', 'CANCELLED', 'COMPLETED')),
+    commission_rate      DECIMAL(5, 4)  NOT NULL DEFAULT 0.05 CHECK (commission_rate >= 0 AND commission_rate <= 1),
+    flat_fee_per_ticket  DECIMAL(15, 2) NOT NULL DEFAULT 3000 CHECK (flat_fee_per_ticket >= 0),
+    created_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_events_category ON events(category_id);
@@ -306,7 +332,7 @@ TTL:    không set (clean up bằng background job)
 | `id` | `UUID` | **PK** | Mã giao dịch nội bộ |
 | `booking_id` | `UUID` | NOT NULL | 🔗 Soft Key → Booking.bookings |
 | `amount` | `DECIMAL(15,2)` | NOT NULL | Số tiền thanh toán |
-| `payment_method` | `VARCHAR(50)` | NOT NULL | Phương thức (VNPAY, STRIPE...) |
+| `payment_method` | `VARCHAR(50)` | NOT NULL | Phương thức (MOMO) |
 | `gateway_trans_id` | `VARCHAR(255)` | UNIQUE | Mã giao dịch từ cổng thanh toán |
 | `status` | `ENUM` | NOT NULL, DEFAULT 'PENDING' | Trạng thái giao dịch |
 | `gateway_response` | `JSONB` | | Response gốc từ cổng thanh toán |
@@ -332,6 +358,80 @@ CREATE TABLE transactions (
 CREATE INDEX idx_transactions_booking ON transactions(booking_id);
 CREATE INDEX idx_transactions_status ON transactions(status);
 CREATE INDEX idx_transactions_gateway ON transactions(gateway_trans_id);
+```
+### Bảng `payout_requests` 🆕
+
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|-----|------|-----------|--------|
+| `id` | `UUID` | **PK** | |
+| `organizer_id` | `UUID` | NOT NULL | 🔗 Soft Key → Auth.accounts |
+| `amount` | `DECIMAL(15,2)` | NOT NULL | Số tiền yêu cầu rút |
+| `bank_name` | `VARCHAR(100)` | NOT NULL | |
+| `bank_account_number` | `VARCHAR(50)` | NOT NULL | |
+| `bank_account_holder` | `VARCHAR(255)` | NOT NULL | |
+| `status` | `ENUM` | NOT NULL, DEFAULT 'PENDING' | `PENDING`/`APPROVED`/`REJECTED`/`PAID`/`HOLD` |
+| `source` | `ENUM` | NOT NULL | `AUTO` (job nền 7 ngày sau event) / `MANUAL` (Organizer tự xin) |
+| `event_id` | `UUID` | NULL | 🔗 Soft Key → Catalog.events (chỉ khi `source=AUTO`) |
+| `reason` | `TEXT` | NULL | Bắt buộc khi `REJECTED` hoặc `HOLD` |
+| `momo_disbursement_id` | `VARCHAR(255)` | NULL, UNIQUE | `requestId` gửi lên MoMo Disbursement API, dùng để đối soát/tránh gọi trùng |
+| `created_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | |
+| `processed_at` | `TIMESTAMP` | NULL | Thời điểm chuyển sang trạng thái cuối (`PAID`/`REJECTED`) |
+
+```sql
+CREATE TABLE organizer_wallets (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organizer_id       UUID           NOT NULL UNIQUE,  -- Soft Key → Auth Service
+    available_balance  DECIMAL(15, 2) NOT NULL DEFAULT 0,
+    pending_payout     DECIMAL(15, 2) NOT NULL DEFAULT 0,
+    total_withdrawn    DECIMAL(15, 2) NOT NULL DEFAULT 0,
+    updated_at         TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_organizer_wallets_organizer ON organizer_wallets(organizer_id);
+```
+
+### Bảng `payout_requests` 🆕
+
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|-----|------|-----------|--------|
+| `id` | `UUID` | **PK** | |
+| `organizer_id` | `UUID` | NOT NULL | 🔗 Soft Key → Auth.accounts |
+| `amount` | `DECIMAL(15,2)` | NOT NULL | Số tiền yêu cầu rút |
+| `bank_name` | `VARCHAR(100)` | NOT NULL | |
+| `bank_account_number` | `VARCHAR(50)` | NOT NULL | |
+| `bank_account_holder` | `VARCHAR(255)` | NOT NULL | |
+| `status` | `ENUM` | NOT NULL, DEFAULT 'PENDING' | `PENDING`/`APPROVED`/`REJECTED`/`PAID`/`HOLD` |
+| `source` | `ENUM` | NOT NULL | `AUTO` (job nền 7 ngày sau event) / `MANUAL` (Organizer tự xin) |
+| `event_id` | `UUID` | NULL | 🔗 Soft Key → Catalog.events (chỉ khi `source=AUTO`) |
+| `reason` | `TEXT` | NULL | Bắt buộc khi `REJECTED` hoặc `HOLD` |
+| `momo_disbursement_id` | `VARCHAR(255)` | NULL, UNIQUE | `requestId` gửi lên MoMo Disbursement API, dùng để đối soát/tránh gọi trùng |
+| `created_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | |
+| `processed_at` | `TIMESTAMP` | NULL | Thời điểm chuyển sang trạng thái cuối (`PAID`/`REJECTED`) |
+
+```sql
+CREATE TABLE payout_requests (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organizer_id          UUID           NOT NULL,  -- Soft Key → Auth Service
+    amount                DECIMAL(15, 2) NOT NULL CHECK (amount > 0),
+    bank_name             VARCHAR(100)   NOT NULL,
+    bank_account_number   VARCHAR(50)    NOT NULL,
+    bank_account_holder   VARCHAR(255)   NOT NULL,
+    status                VARCHAR(20)    NOT NULL DEFAULT 'PENDING'
+                          CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'PAID', 'HOLD')),
+    source                VARCHAR(10)    NOT NULL CHECK (source IN ('AUTO', 'MANUAL')),
+    event_id              UUID,          -- Soft Key → Catalog Service, chỉ khi source=AUTO
+    reason                TEXT,
+    momo_disbursement_id  VARCHAR(255)   UNIQUE,
+    created_at            TIMESTAMP      NOT NULL DEFAULT NOW(),
+    processed_at          TIMESTAMP,
+
+    CONSTRAINT chk_reason_required CHECK (status NOT IN ('REJECTED', 'HOLD') OR reason IS NOT NULL)
+);
+
+CREATE INDEX idx_payout_requests_organizer ON payout_requests(organizer_id);
+CREATE INDEX idx_payout_requests_status ON payout_requests(status);
+CREATE UNIQUE INDEX idx_payout_requests_event_auto ON payout_requests(event_id)
+    WHERE source = 'AUTO';  -- mỗi event chỉ có tối đa 1 payout AUTO
 ```
 
 ---
@@ -381,13 +481,13 @@ db.notification_logs.createIndex({ createdAt: 1 }, { expireAfterSeconds: 7776000
 ## ER Diagram (Tổng quan quan hệ)
 
 ```
-      ┌──────────────────┐         ┌───────────────────┐
-      │  Auth Service    │         │   User Service    │
-      │                  │         │                   │
-      │  ┌────────────┐  │  soft   │  ┌─────────────┐  │
-      │  │  accounts  │◄─┼─────────┼──│  profiles   │  │
-      │  └────────────┘  │   key   │  └─────────────┘  │
-      └────────┬─────────┘         └───────────────────┘
+      ┌──────────────────┐         ┌──────────────────┐
+      │  Auth Service    │         │   User Service   │
+      │                  │         │                  │
+      │  ┌────────────┐  │  soft   │  ┌─────────────┐ │
+      │  │  accounts  │◄─┼─────────┼──│  profiles   │ │
+      │  └────────────┘  │   key   │  └─────────────┘ │
+      └────────┬─────────┘         └──────────────────┘
                │ soft key
                ▼
 ┌────────────────────────────────────────────────────────────────┐
@@ -396,26 +496,26 @@ db.notification_logs.createIndex({ createdAt: 1 }, { expireAfterSeconds: 7776000
 │ ┌──────────┐    FK     ┌────────┐    FK     ┌────────────────┐ │
 │ │categories│◄──────────│ events │◄──────────│ ticket_classes │ │
 │ └──────────┘           └────────┘           └────────────────┘ │
-└──────────────────────────────┬─────────────────────────────────┘
+└──────────────────────────┬─────────────────────────────────────┘
+                           │ soft key
+                           ▼
+        ┌──────────────────────────────────────────────┐
+        │                Booking Service               │
+        │                                              │
+        │       ┌──────────┐    FK     ┌─────────┐     │
+        │       │ bookings │◄──────────│ tickets │     │
+        │       └──────────┘           └─────────┘     │
+        │              + Redis (seat holding)          │
+        └──────────────────────┬───────────────────────┘
                                │ soft key
                                ▼
-        ┌────────────────────────────────────────────────┐
-        │                Booking Service                 │
-        │                                                │
-        │       ┌──────────┐    FK     ┌─────────┐       │
-        │       │ bookings │◄──────────│ tickets │       │
-        │       └──────────┘           └─────────┘       │
-        │              + Redis (seat holding)            │
-        └──────────────────────┬─────────────────────────┘
-                               │ soft key
-                               ▼
-                ┌───────────────────────────────┐
-                │       Payment Service         │
-                │                               │
-                │       ┌──────────────┐        │
-                │       │ transactions │        │
-                │       └──────────────┘        │
-                └───────────────────────────────┘
+                ┌──────────────────────────────┐
+                │       Payment Service        │
+                │                              │
+                │       ┌──────────────┐       │
+                │       │ transactions │       │
+                │       └──────────────┘       │
+                └──────────────────────────────┘
 ```
 
 ---

@@ -36,6 +36,14 @@ public class Account {
     @Builder.Default
     private AccountStatus status = AccountStatus.ACTIVE;
 
+    /**
+     * true khi tài khoản được Admin tạo bằng mật khẩu tạm (Organizer) — bắt buộc
+     * đổi mật khẩu ở lần đăng nhập đầu tiên trước khi dùng các API khác.
+     */
+    @Column(name = "require_password_change", nullable = false)
+    @Builder.Default
+    private boolean requirePasswordChange = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

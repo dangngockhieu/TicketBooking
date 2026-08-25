@@ -77,6 +77,11 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.FORBIDDEN, exception.getMessage() != null ? exception.getMessage() : "Access is denied.", null);
     }
 
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTooManyRequests(TooManyRequestsException exception) {
+        return buildErrorResponse(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), null);
+    }
+
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ApiResponse<Void>> handleMissingHeader(MissingRequestHeaderException exception) {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Thiếu header bắt buộc: " + exception.getHeaderName(), null);

@@ -51,6 +51,8 @@ public class SecurityConfig {
                                                                 "/api/auth/login",
                                                                 "/api/auth/register",
                                                                 "/api/auth/refresh",
+                                                                "/api/auth/verify-email",
+                                                                "/api/auth/resend-verification",
                                                                 "/actuator/**")
                                                 .permitAll()
                                                 .anyRequest().authenticated())

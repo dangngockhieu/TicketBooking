@@ -1,4 +1,4 @@
-# 🎫 TicketBooking
+﻿# 🎫 TicketBooking
 
 > **Hệ thống Đặt vé Sự kiện phân tán — Distributed Event Ticketing System**
 
@@ -11,6 +11,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
 ---
+Frontend repository: [TicketBooking-Frontend](https://github.com/dangngockhieu/TicketBooking-Frontend)
 
 ## 📖 Mục lục
 
@@ -66,7 +67,7 @@ B2B2C (Mô hình đóng)
                                        │               │
                                 ┌──────▼──────┐┌───────▼──────┐
                                 │ Payment Svc ││ Notification │
-                                │   (VNPay)   ││   Service    │
+                                │   (Momo)    ││   Service    │
                                 │   Postgres  ││   MongoDB    │
                                 └──────┬──────┘└───────▲──────┘
                                        │               │
@@ -120,7 +121,7 @@ Hệ thống tuân thủ nghiêm ngặt nguyên tắc **Database per Service** v
 | 📊 Tình trạng vé Real-time | Hiển thị số lượng vé còn trống chính xác theo thời gian thực |
 | 🚦 Xếp hàng phòng chờ ảo | Khi sự kiện quá tải, tự động vào phòng chờ với số thứ tự và thời gian ước tính |
 | 🔒 Giữ chỗ (Seat Hold) | Khóa số lượng vé mong muốn trong **10 phút** để thanh toán |
-| 💳 Thanh toán Trực tuyến | Thanh toán qua cổng VNPay Sandbox (hỗ trợ thẻ ATM, QR Pay) |
+| 💳 Thanh toán Trực tuyến | Thanh toán qua MoMo Payment Gateway (ví­ MoMo, thẻ ATM/Napas, ...) |
 | 🎟 E-Ticket (QR Code) | Nhận vé điện tử có mã QR độc nhất qua email ngay sau khi thanh toán |
 
 ### 🏢 Organizer (Ban tổ chức)
@@ -129,7 +130,9 @@ Hệ thống tuân thủ nghiêm ngặt nguyên tắc **Database per Service** v
 | 📝 Quản lý sự kiện | Đăng tải thông tin, banner, cấu hình thời gian mở/đóng bán |
 | 🎫 Quản lý hạng vé | Phân loại VVIP, VIP, GA với giá bán và số lượng phát hành |
 | 📱 Check-in QR Code | Quét mã QR xác minh vé vào cổng, chặn quét trùng lặp |
-| 📈 Báo cáo doanh thu | Thống kê vé bán ra, tỷ lệ lấp đầy và doanh thu thực tế |
+| 📈 Báo cáo doanh thu | Thống kê vé bán ra, tỷ lệ lấp đầy và doanh thu thực tế (gross, phí nền tảng, doanh thu ròng) |
+| 💰 Ví & Rút tiền | Xem số dư, nhận tiền tự động 7 ngày sau khi sự kiện kết thúc hoặc chủ động xin rút sớm qua MoMo Business Disbursement |
+
 
 ### ⚙️ System Background & Resilience
 | Tính năng | Mô tả |
@@ -137,6 +140,7 @@ Hệ thống tuân thủ nghiêm ngặt nguyên tắc **Database per Service** v
 | ⏰ Auto-Release Seat | Tự động hủy đơn và nhả vé về kho nếu không thanh toán sau 10 phút |
 | 🔌 Disconnect Detection | Cơ chế Heartbeat WebSocket (15s): mất mạng/đóng tab là tự động loại khỏi hàng chờ |
 | 🔄 Saga Rollback | Tự động hoàn tiền nếu hệ thống gặp sự cố sinh vé sau khi đã trừ tiền |
+| 💸 Auto-Payout | Job nền quét sự kiện đã kết thúc đủ 7 ngày, tự động tạo yêu cầu rút tiền cho Organizer |
 
 ---
 

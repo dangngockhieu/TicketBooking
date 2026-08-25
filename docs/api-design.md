@@ -75,7 +75,9 @@ Authorization: Bearer <jwt_token>
 
 ## 1. Auth Service API
 
-### 1.1. Đăng ký tài khoản
+### 1.1. Đăng ký tài khoản (chỉ dành cho **Customer**)
+
+> ⚠️ Endpoint này **chỉ tạo tài khoản `CUSTOMER`**.
 
 ```http
 POST /auth/register
@@ -97,10 +99,51 @@ POST /auth/register
   "data": {
     "id": "uuid",
     "email": "customer@email.com",
-    "role": "CUSTOMER"
+    "role": "CUSTOMER",
+    "status": "PENDING"
   }
 }
 ```
+
+> Tài khoản mới tạo có `status = PENDING` (chờ xác thực email), **chưa đăng nhập được** cho tới khi xác thực OTP thành công ở mục 1.1b. Xem chi tiết luồng ở [`docs/technical-flows.md#luồng-xác-thực-email-otp`](technical-flows.md).
+> ⏳ Việc gửi email OTP qua Kafka (`account.registered` → `notification-service`) **chưa triển khai**
+
+### 1.1b. Xác thực email bằng OTP 🆕
+
+```http
+POST /auth/verify-email
+```
+
+**Request Body:**
+```json
+{
+  "email": "customer@email.com",
+  "otp": "482913"
+}
+```
+
+**Response (200):** trả về như đăng nhập thành công (`AuthResponse` — tự động đăng nhập sau khi xác thực) — `status` tài khoản chuyển `PENDING → ACTIVE`.
+
+**Error Cases:**
+| Code | Error Code | Mô tả |
+|------|-----------|--------|
+| 400 | `OTP_INVALID` | Mã OTP sai |
+| 410 | `OTP_EXPIRED` | Mã OTP đã hết hạn (TTL 5 phút) |
+| 404 | `ACCOUNT_NOT_FOUND` | Không tìm thấy tài khoản ứng với email |
+| 409 | `ACCOUNT_ALREADY_VERIFIED` | Tài khoản đã ở trạng thái `ACTIVE` |
+
+### 1.1c. Gửi lại mã OTP 🆕
+
+```http
+POST /auth/resend-verification
+```
+
+**Request Body:**
+```json
+{ "email": "customer@email.com" }
+```
+
+> Sinh OTP mới, ghi đè key Redis cũ, giới hạn tần suất (vd. tối thiểu 60 giây/lần) để chống spam email.
 
 ### 1.2. Đăng nhập
 
@@ -134,6 +177,10 @@ POST /auth/login
 }
 ```
 
+> ⚠️ Lỗi `403 ACCOUNT_LOCKED (2003)` khi login hiện dùng chung cho **2 trường hợp khác nhau** (tài khoản `LOCKED` do Admin khóa, và Customer mới đăng ký đang `PENDING` chờ xác thực email OTP).
+>
+> Organizer **không rơi vào case `PENDING` chờ duyệt** nữa vì không còn tự đăng ký (xem mục 1.1, 1.5) — tài khoản Organizer do Admin tạo đã ở thẳng `status = ACTIVE`.
+
 ### 1.3. Refresh Token
 
 ```http
@@ -160,6 +207,46 @@ PUT /auth/change-password
   "newPassword": "NewP@ss456"
 }
 ```
+
+### 1.5. Admin tạo tài khoản Organizer 🔒 (ADMIN) 🆕
+
+> Theo `system-design.md` §1.2 và §2.3 (UC-A1): Admin **thẩm định giấy phép tổ chức sự kiện ngoài hệ thống trước** (qua email/hồ sơ giấy), sau đó mới tạo tài khoản trong hệ thống — không có bước "duyệt đơn online" vì không có đơn nào được nộp online cả. Organizer **không tự đăng ký**.
+
+```http
+POST /admin/organizers
+```
+
+**Request Body:**
+```json
+{
+  "email": "bantochuc@abc.vn",
+  "fullName": "Công ty TNHH Sự kiện ABC"
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "email": "bantochuc@abc.vn",
+    "role": "ORGANIZER",
+    "status": "ACTIVE"
+  }
+}
+```
+
+> - Tài khoản tạo ra **`status = ACTIVE` ngay** (không qua `PENDING`/OTP) — vì Admin đã xác minh danh tính ngoài luồng, không cần xác thực email lại.
+> - Mật khẩu: hệ thống tự sinh mật khẩu tạm ngẫu nhiên (không nhận `password` từ Admin để tránh Admin biết mật khẩu thật của Organizer).
+> - ⏳ Gửi mật khẩu tạm qua email cho Organizer: phụ thuộc Kafka/`notification-service` (chưa triển khai — xem mục 1.1). Tạm thời ở môi trường dev, response trả kèm `tempPassword` khi `spring.profiles.active=dev`, hoặc Admin lấy log server.
+> - Lần đăng nhập đầu tiên bằng mật khẩu tạm: response `AuthResponse` có thêm cờ `"requirePasswordChange": true` → FE bắt buộc chuyển tới `PUT /auth/change-password` trước khi cho vào các trang khác.
+
+**Error Cases:**
+| Code | Error Code | Mô tả |
+|------|-----------|--------|
+| 409 | `EMAIL_ALREADY_EXISTS` | Email đã tồn tại tài khoản khác |
+| 400 | `INVALID_INPUT_DATA` | Thiếu email/fullName |
 
 ---
 
@@ -456,9 +543,12 @@ POST /bookings/check-in
 | 409 | `TICKET_ALREADY_CHECKED_IN` | Vé đã được check-in trước đó |
 | 409 | `TICKET_NOT_ISSUED` | Vé chưa được phát hành (chưa thanh toán) |
 
----
-
 ## 5. Payment Service API
+
+> **Cổng thanh toán:** [MoMo Payment Gateway](https://developers.momo.vn) — tích hợp qua endpoint `/v2/gateway/api/create`.
+> Khách chọn nguồn tiền (ví MoMo, thẻ ATM/Napas, thẻ quốc tế Visa/MC) ngay trên trang thanh toán do MoMo hiển thị — **backend chỉ tích hợp một API duy nhất**, không cần phân biệt từng phương thức.
+
+---
 
 ### 5.1. Khởi tạo thanh toán 🔒 (CUSTOMER)
 
@@ -466,14 +556,48 @@ POST /bookings/check-in
 POST /payments/initiate
 ```
 
+**Điều kiện tiên quyết:**
+* Booking tồn tại, thuộc về Customer đang đăng nhập.
+* Booking có `status = PENDING_PAYMENT` và chưa hết hạn (`expired_at > now()`).
+* Chưa có transaction `PENDING` hoặc `SUCCESS` nào cho booking này (idempotency).
+
 **Request Body:**
 ```json
 {
   "bookingId": "booking-uuid",
-  "paymentMethod": "VNPAY",
   "returnUrl": "https://ticketbooking.vn/payment/result"
 }
 ```
+
+**Xử lý phía backend (`Payment Service`):**
+1. Validate booking hợp lệ (gọi nội bộ sang Booking Service).
+2. Tạo `Transaction` record với `status = PENDING`.
+3. Tạo `requestId` = UUID mới (dùng cho idempotency với MoMo).
+4. Gọi MoMo API:
+```http
+POST https://payment.momo.vn/v2/gateway/api/create
+Content-Type: application/json
+
+{
+  "partnerCode": "${MOMO_PARTNER_CODE}",
+  "requestId":   "<uuid>",
+  "amount":      3000000,
+  "orderId":     "<bookingId>",
+  "orderInfo":   "Thanh toán vé sự kiện - <bookingId>",
+  "redirectUrl": "<returnUrl>",
+  "ipnUrl":      "https://api.ticketbooking.vn/v1/payments/momo/ipn",
+  "requestType": "captureWallet",
+  "extraData":   "",
+  "lang":        "vi",
+  "signature":   "<HMAC-SHA256>"
+}
+```
+5. Chữ ký `signature` được tạo bằng **HMAC-SHA256** trên chuỗi raw:
+```
+rawSignature = "amount=3000000&extraData=&ipnUrl=...&orderId=...&orderInfo=...&partnerCode=MOMO&redirectUrl=...&requestId=...&requestType=captureWallet"
+signature = HMAC_SHA256(rawSignature, secretKey)
+```
+6. Lưu `payUrl` từ MoMo vào transaction, trả về client.
 
 **Response (200):**
 ```json
@@ -481,37 +605,215 @@ POST /payments/initiate
   "success": true,
   "data": {
     "transactionId": "txn-uuid",
-    "paymentUrl": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?...",
-    "expiredAt": "2024-01-01T12:10:00Z"
+    "bookingId":     "booking-uuid",
+    "amount":        3000000,
+    "paymentUrl":    "https://payment.momo.vn/v2/gateway/pay?t=...",
+    "expiredAt":     "2024-06-15T12:10:00Z"
   }
 }
 ```
 
-### 5.2. VNPay Callback (IPN — Instant Payment Notification)
+**Error Cases:**
+| HTTP | Error Code | Mô tả |
+|------|-----------|--------|
+| 404 | `BOOKING_NOT_FOUND` | Booking không tồn tại |
+| 403 | `BOOKING_NOT_OWNED` | Booking không thuộc về Customer này |
+| 409 | `BOOKING_EXPIRED` | Booking đã quá 10 phút, không thể thanh toán |
+| 409 | `BOOKING_ALREADY_PAID` | Booking đã thanh toán trước đó |
+| 502 | `MOMO_GATEWAY_ERROR` | Lỗi kết nối cổng MoMo |
+
+---
+
+### 5.2. MoMo IPN Callback — Instant Payment Notification
+
+> **Đây là endpoint server-to-server do MoMo tự động gọi** khi khách thanh toán xong — không phải redirect trình duyệt.
+> URL này phải được đăng ký trong MoMo Developer Portal: `https://api.ticketbooking.vn/v1/payments/momo/ipn`
+> **Bắt buộc trả về `HTTP 204` trong vòng 5 giây**, nếu không MoMo sẽ retry tối đa 5 lần.
 
 ```http
-GET /payments/vnpay/callback?vnp_TxnRef=...&vnp_ResponseCode=00&vnp_Amount=...
+POST /payments/momo/ipn
 ```
 
-> Endpoint này được VNPay gọi tự động sau khi khách thanh toán. Service sẽ xác minh checksum, lưu giao dịch và bắn Kafka event.
+**Request Body (MoMo gửi đến `ipnUrl`):**
+```json
+{
+  "partnerCode": "MOMO",
+  "orderId":     "booking-uuid",
+  "requestId":   "req-uuid",
+  "amount":      3000000,
+  "orderInfo":   "Thanh toán vé sự kiện - booking-uuid",
+  "orderType":   "momo_wallet",
+  "transId":     4123456789,
+  "resultCode":  0,
+  "message":     "Successful.",
+  "payType":     "qr",
+  "responseTime": 1718448000000,
+  "extraData":   "",
+  "signature":   "..."
+}
+```
 
-### 5.3. Xem lịch sử giao dịch 🔒
+**Xử lý phía backend:**
+1. **Verify chữ ký HMAC-SHA256** trên raw string:
+   ```
+   rawSignature = "amount=3000000&extraData=&message=Successful.&orderId=...&orderInfo=...&orderType=momo_wallet&partnerCode=MOMO&payType=qr&requestId=...&responseTime=...&resultCode=0&transId=4123456789"
+   ```
+   Nếu `signature` không khớp → **trả 400, dừng xử lý** (ngăn giả mạo callback).
+2. Kiểm tra `amount` khớp với booking (chống tấn công thay đổi số tiền).
+3. **Idempotency check:** nếu `transId` đã tồn tại trong DB → bỏ qua, trả 204.
+4. Nếu `resultCode = 0` (thành công):
+   * Cập nhật `Transaction.status = SUCCESS`, lưu `transId`, `paidAt`.
+   * Publish Kafka event `payment.success`.
+5. Nếu `resultCode ≠ 0` (thất bại):
+   * Cập nhật `Transaction.status = FAILED`.
+   * Publish Kafka event `payment.failed`.
+6. Trả về `HTTP 204` cho MoMo.
+
+**resultCode quan trọng của MoMo:**
+| resultCode | Ý nghĩa |
+|-----------|---------|
+| `0` | Thành công |
+| `1000` | Đang chờ xác nhận (pending) |
+| `1001` | Giao dịch thất bại (không đủ số dư) |
+| `1006` | Người dùng huỷ thanh toán |
+| `1005` | Token/URL hết hạn |
+| `9000` | Giao dịch bị từ chối bởi ngân hàng |
+
+---
+
+### 5.3. MoMo Return URL (Redirect trình duyệt)
+
+> Sau khi khách thanh toán xong, **MoMo redirect trình duyệt** về `returnUrl` (frontend URL) với các query params:
+
+```
+GET https://ticketbooking.vn/payment/result
+    ?partnerCode=MOMO
+    &orderId=booking-uuid
+    &requestId=req-uuid
+    &amount=3000000
+    &orderInfo=...
+    &orderType=momo_wallet
+    &transId=4123456789
+    &resultCode=0
+    &message=Successful.
+    &payType=qr
+    &responseTime=1718448000000
+    &extraData=
+    &signature=...
+```
+
+> ⚠️ **Frontend không được tin tuyệt đối** vào redirect này (có thể bị giả mạo). Sau khi nhận redirect, frontend gọi API `GET /bookings/{id}` để lấy `status` thật từ DB — chỉ hiển thị kết quả theo trạng thái booking thực tế, không theo query params của redirect.
+
+---
+
+### 5.4. Hoàn tiền (Refund) — Saga Compensation
+
+> Được kích hoạt tự động khi Booking Service publish event `booking.refund-requested`.
+> **Không có API public** — chỉ là Kafka consumer nội bộ.
+
+**Luồng hoàn tiền:**
+```
+booking.refund-requested (Kafka)
+        ↓
+Payment Service consume
+        ↓
+POST https://payment.momo.vn/v2/gateway/api/refund
+{
+  "partnerCode": "MOMO",
+  "orderId":     "<bookingId>-refund-<timestamp>",
+  "requestId":   "<uuid>",
+  "amount":      3000000,
+  "transId":     4123456789,   ← transId MoMo gốc
+  "lang":        "vi",
+  "description": "Hoàn tiền đơn hàng booking-uuid do lỗi hệ thống",
+  "signature":   "<HMAC-SHA256>"
+}
+        ↓
+resultCode = 0 → Transaction.status = REFUNDED
+        ↓
+Publish Kafka event: payment.refunded
+        ↓
+Booking Service: booking = REFUNDED, giải phóng vé
+```
+
+---
+
+### 5.5. Xem lịch sử giao dịch 🔒 (CUSTOMER)
 
 ```http
 GET /payments/history?page=1&size=10
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "transactionId":  "txn-uuid",
+      "bookingId":      "booking-uuid",
+      "amount":         3000000,
+      "status":         "SUCCESS",
+      "payType":        "qr",
+      "momoTransId":    4123456789,
+      "paidAt":         "2024-06-15T12:05:32Z",
+      "eventTitle":     "Sơn Tùng MTP Live Concert"
+    }
+  ],
+  "pagination": { "page": 1, "size": 10, "totalElements": 3, "totalPages": 1 }
+}
+```
+
+---
+
+### 5.6. Chi tiết giao dịch 🔒 (CUSTOMER)
+
+```http
+GET /payments/transactions/{transactionId}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "transactionId":  "txn-uuid",
+    "bookingId":      "booking-uuid",
+    "amount":         3000000,
+    "status":         "SUCCESS",
+    "paymentMethod":  "MOMO",
+    "payType":        "qr",
+    "momoTransId":    4123456789,
+    "gatewayResponse": { "resultCode": 0, "message": "Successful." },
+    "paidAt":         "2024-06-15T12:05:32Z",
+    "createdAt":      "2024-06-15T12:00:10Z"
+  }
+}
 ```
 
 ---
 
 ## 6. Admin API
 
-### 6.1. Danh sách Organizer chờ duyệt 🔒 (ADMIN)
+### 6.1. Danh sách tài khoản Organizer 🔒 (ADMIN)
+
+> ⚠️ Đổi từ "chờ duyệt" thành liệt kê chung + lọc theo `status`, vì Organizer không còn ở trạng thái `PENDING` chờ duyệt (xem mục 1.5 — Admin tạo tài khoản là `ACTIVE` ngay). Endpoint này dùng để Admin xem lại/khóa các Organizer đã tạo, không phải hàng đợi phê duyệt.
 
 ```http
-GET /admin/organizers?status=PENDING&page=1&size=20
+GET /admin/organizers?status=ACTIVE&page=1&size=20
 ```
 
-### 6.2. Duyệt / Khóa tài khoản 🔒 (ADMIN)
+### 6.1b. Tạo tài khoản Organizer 🔒 (ADMIN) 🆕
+
+Xem chi tiết đầy đủ ở mục **1.5**.
+
+```http
+POST /admin/organizers
+```
+
+### 6.2. Khóa / Mở khóa tài khoản 🔒 (ADMIN)
+
+> Đổi tên từ "Duyệt / Khóa" — vì không còn bước "duyệt" (chỉ còn khóa/mở khóa tài khoản đã `ACTIVE`).
 
 ```http
 PATCH /admin/accounts/{accountId}/status
@@ -520,8 +822,8 @@ PATCH /admin/accounts/{accountId}/status
 **Request Body:**
 ```json
 {
-  "status": "ACTIVE",
-  "reason": "Đã xác minh giấy phép tổ chức sự kiện"
+  "status": "LOCKED",
+  "reason": "Vi phạm điều khoản sử dụng"
 }
 ```
 
@@ -533,15 +835,61 @@ PUT    /admin/categories/{id}     # Sửa danh mục
 DELETE /admin/categories/{id}     # Xóa danh mục
 ```
 
+### 6.4. Sự kiện & phí nền tảng 🔒 (ADMIN) 🆕
+
+> Admin xem mọi sự kiện của mọi Organizer (mọi trạng thái) và sửa phí nền tảng riêng cho từng sự kiện. Xem công thức phí ở mục 7.1.
+
+```http
+GET /admin/events?status={status}&keyword={keyword}&page=1&size=20
+```
+
+```http
+PATCH /admin/events/{eventId}/commission
+```
+
+**Request Body:**
+```json
+{
+  "commissionRate": 0.05,
+  "flatFeePerTicket": 3000
+}
+```
+
+> Mặc định khi tạo sự kiện: `commissionRate = 0.05` (5%), `flatFeePerTicket = 3000` (VND). Chỉ Admin sửa được — Organizer chỉ xem.
+
+### 6.5. Duyệt yêu cầu rút tiền (Payout) 🔒 (ADMIN) 🆕
+
+> Xem chi tiết state machine và tích hợp MoMo Disbursement ở mục 7.4.
+
+```http
+GET /admin/payouts?status={status}&page=1&size=20
+```
+
+```http
+PATCH /admin/payouts/{requestId}/status
+```
+
+**Request Body:**
+```json
+{
+  "status": "APPROVED",
+  "reason": null
+}
+```
+
+> `status` ∈ `APPROVED | REJECTED | PAID | HOLD | PENDING`. Bắt buộc có `reason` khi `REJECTED` hoặc `HOLD`.
+
 ---
 
-## 7. Organizer Report API
+## 7. Organizer Report & Payout API
 
 ### 7.1. Báo cáo doanh thu 🔒 (ORGANIZER)
 
 ```http
 GET /organizer/events/{eventId}/report
 ```
+
+> **Phí nền tảng (hoa hồng):** mỗi vé bán được bị thu phí `phí/vé = giá vé × commissionRate + flatFeePerTicket` (vé giá 0đ luôn được miễn phí hoàn toàn, không tính `flatFeePerTicket`). `commissionRate`/`flatFeePerTicket` mặc định 5% + 3.000đ/vé, Admin có thể sửa riêng theo từng sự kiện (mục 6.4). `netRevenue = totalRevenue - totalPlatformFee` là số tiền thực sự được cộng vào ví Organizer.
 
 **Response (200):**
 ```json
@@ -552,6 +900,8 @@ GET /organizer/events/{eventId}/report
     "eventTitle": "Sơn Tùng MTP Live Concert 2024",
     "summary": {
       "totalRevenue": 1250000000,
+      "totalPlatformFee": 68500000,
+      "netRevenue": 1181500000,
       "totalTicketsSold": 1850,
       "totalTicketsCheckedIn": 1200,
       "checkInRate": 64.86
@@ -588,6 +938,73 @@ GET /organizer/events/{eventId}/report
   }
 }
 ```
+
+### 7.2. Xem ví 🔒 (ORGANIZER) 🆕
+
+```http
+GET /organizer/wallet
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "availableBalance": 125000000,
+    "pendingPayout": 8000000,
+    "totalWithdrawn": 200000000,
+    "updatedAt": "2026-09-24T10:00:00+07:00"
+  }
+}
+```
+
+> `availableBalance` = Σ `netRevenue` của mọi sự kiện đã `COMPLETED`, trừ đi các payout đang `PENDING`/`APPROVED`/`HOLD`/`PAID`.
+
+### 7.3. Yêu cầu rút tiền 🔒 (ORGANIZER) 🆕
+
+```http
+POST /organizer/payouts
+```
+
+**Request Body:**
+```json
+{
+  "amount": 50000000,
+  "bankAccount": {
+    "bankName": "Vietcombank",
+    "accountNumber": "0071000123456",
+    "accountHolderName": "CONG TY TNHH ABC"
+  }
+}
+```
+
+> Tạo yêu cầu `status: PENDING`, `source: MANUAL`. Từ chối nếu `amount > availableBalance` (409) hoặc `amount ≤ 0` (400).
+
+```http
+GET /organizer/payouts?status={status}&page=1&size=20
+```
+
+### 7.4. Payout tự động & Chi trả qua MoMo Disbursement 🆕
+
+> Theo mô hình Ticketbox/Eventbrite: tiền tự động về cho Organizer, không cần chủ động xin.
+
+```
+Job nền (Scheduled, chạy mỗi ngày):
+  quét events có status=COMPLETED và endTime + 7 ngày ≤ now
+    và chưa có payout AUTO ứng với event đó
+  → tạo PayoutRequest { status: PENDING, source: AUTO, eventId, amount: netRevenue của event }
+```
+
+Khi Admin duyệt (`PATCH /admin/payouts/{id}/status` → `APPROVED` rồi → `PAID`), backend gọi **MoMo Business Disbursement API** để tự động chi tiền vào tài khoản ngân hàng/ví MoMo của Organizer, thay vì Admin tự chuyển khoản thủ công:
+
+```http
+POST https://payment.momo.vn/v2/gateway/api/disburse
+```
+
+- Request ký bằng `signature` (HMAC-SHA256) như các API MoMo khác, gồm `partnerCode`, `requestId`, `orderId` (= `payoutRequestId`), `amount`, `receiver` (số tài khoản ngân hàng hoặc số điện thoại ví MoMo người nhận), `description`.
+- Kết quả trả về đồng bộ (`resultCode`) hoặc callback bất đồng bộ tùy loại giao dịch (chuyển khoản ngân hàng thường xử lý bất đồng bộ, có IPN riêng cho Disbursement khác với IPN thanh toán ở mục 5.2).
+- Thành công → `PayoutRequest.status = PAID`, `processedAt = now()`.
+- Thất bại → giữ nguyên `APPROVED`, ghi log lỗi để Admin xử lý lại hoặc chuyển khoản thủ công dự phòng.
 
 ---
 
