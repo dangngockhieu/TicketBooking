@@ -1,0 +1,40 @@
+# ==============================================================================
+# USER SERVICE CONFIGURATION (PHÂN PHỐI BỞI CONFIG SERVER)
+# ==============================================================================
+server:
+  port: 8082
+
+spring:
+  # Cấu hình kết nối PostgreSQL (Container postgres-user :5434)
+  datasource:
+    url: jdbc:postgresql://${USER_DB_HOST}:${USER_DB_PORT}/${USER_DB_NAME}
+    username: ${USER_DB_USER}
+    password: ${USER_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  # JPA & Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: validate # Flyway chịu trách nhiệm tạo bảng, JPA chỉ kiểm tra
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: Asia/Ho_Chi_Minh
+
+  # Flyway Database Migration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  # OAuth2 Resource Server — CHỈ xác thực JWT bằng Public Key lấy từ JWKS của
+  # auth-service (Zero Trust: user-service không nắm Private Key, không tự ký
+  # token). Xem docs/system-design.md §8, §9.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8081/.well-known/jwks.json
