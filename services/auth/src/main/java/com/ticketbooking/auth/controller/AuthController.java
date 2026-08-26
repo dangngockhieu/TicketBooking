@@ -1,10 +1,12 @@
 package com.ticketbooking.auth.controller;
 
 import com.ticketbooking.auth.dto.request.ChangePasswordRequest;
+import com.ticketbooking.auth.dto.request.ForgotPasswordRequest;
 import com.ticketbooking.auth.dto.request.LoginRequest;
 import com.ticketbooking.auth.dto.request.RefreshTokenRequest;
 import com.ticketbooking.auth.dto.request.RegisterRequest;
 import com.ticketbooking.auth.dto.request.ResendVerificationRequest;
+import com.ticketbooking.auth.dto.request.ResetPasswordRequest;
 import com.ticketbooking.auth.dto.request.VerifyEmailRequest;
 import com.ticketbooking.auth.dto.response.AuthResponse;
 import com.ticketbooking.auth.dto.response.LoginResult;
@@ -151,6 +153,19 @@ public class AuthController {
         String email = SecurityUtil.getCurrentUserLogin().orElse(null);
         AuthResponse.UserInfo profile = authService.getCurrentUserProfile(email);
         return ResponseEntity.ok(ApiResponse.success("Lấy thông tin tài khoản thành công.", profile));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Nếu email tồn tại trong hệ thống, mã OTP đặt lại mật khẩu đã được gửi.", null));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success("Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.", null));
     }
 
     @PutMapping("/change-password")

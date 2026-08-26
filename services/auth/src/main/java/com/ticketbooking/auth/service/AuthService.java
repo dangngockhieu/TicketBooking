@@ -2,9 +2,11 @@ package com.ticketbooking.auth.service;
 
 import com.ticketbooking.auth.dto.request.AdminCreateOrganizerRequest;
 import com.ticketbooking.auth.dto.request.ChangePasswordRequest;
+import com.ticketbooking.auth.dto.request.ForgotPasswordRequest;
 import com.ticketbooking.auth.dto.request.LoginRequest;
 import com.ticketbooking.auth.dto.request.RegisterRequest;
 import com.ticketbooking.auth.dto.request.ResendVerificationRequest;
+import com.ticketbooking.auth.dto.request.ResetPasswordRequest;
 import com.ticketbooking.auth.dto.request.VerifyEmailRequest;
 import com.ticketbooking.auth.dto.response.AdminCreateOrganizerResponse;
 import com.ticketbooking.auth.dto.response.AuthResponse;
@@ -44,4 +46,19 @@ public interface AuthService {
      * khi đã thẩm định giấy phép tổ chức sự kiện ngoài hệ thống.
      */
     AdminCreateOrganizerResponse createOrganizer(AdminCreateOrganizerRequest request);
+
+    /**
+     * Sinh OTP đặt lại mật khẩu nếu email tồn tại. Luôn thành công (không ném
+     * lỗi khi không tìm thấy tài khoản) để chống dò email hợp lệ (account
+     * enumeration) — xem FE docs/04-auth-flow.md §3.3d.
+     */
+    void forgotPassword(ForgotPasswordRequest request);
+
+    /**
+     * Xác thực OTP đặt lại mật khẩu và đổi mật khẩu mới. Khác {@code
+     * forgotPassword}, endpoint này ĐƯỢC PHÉP tiết lộ tài khoản không tồn tại
+     * (404) vì OTP đã được gửi riêng ở bước trước — không tăng thêm rủi ro dò
+     * email. Thành công thì thu hồi toàn bộ refresh token, không tự đăng nhập.
+     */
+    void resetPassword(ResetPasswordRequest request);
 }

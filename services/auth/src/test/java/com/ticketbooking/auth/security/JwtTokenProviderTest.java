@@ -1,5 +1,8 @@
 package com.ticketbooking.auth.security;
 
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
 import com.ticketbooking.auth.config.JwtConfig;
 import com.ticketbooking.auth.dto.response.AuthResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,18 +17,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class JwtTokenProviderTest {
 
+    // Keypair riêng cho test (không dùng chung với keypair dev thật ở secrets/jwt/),
+    // lưu ở src/test/resources/keys/ — Maven Surefire chạy test với working dir = module basedir.
+    private static final String TEST_PRIVATE_KEY_PATH = "src/test/resources/keys/private-test.key";
+    private static final String TEST_PUBLIC_KEY_PATH = "src/test/resources/keys/public-test.key";
+
     private JwtTokenProvider jwtTokenProvider;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         JwtProperties properties = new JwtProperties(
-                "this_is_a_very_secure_secret_key_ticket_booking_system_32_bytes_min",
+                TEST_PRIVATE_KEY_PATH,
+                TEST_PUBLIC_KEY_PATH,
+                "test-key-1",
                 3600,
                 86400
         );
         JwtConfig jwtConfig = new JwtConfig(properties);
-        JwtEncoder encoder = jwtConfig.jwtEncoder();
-        JwtDecoder decoder = jwtConfig.jwtDecoder();
+        RSAKey rsaKey = jwtConfig.rsaKey();
+        JWKSource<SecurityContext> jwkSource = jwtConfig.jwkSource(rsaKey);
+        JwtEncoder encoder = jwtConfig.jwtEncoder(jwkSource);
+        JwtDecoder decoder = jwtConfig.jwtDecoder(rsaKey);
 
         jwtTokenProvider = new JwtTokenProvider(encoder, decoder, properties);
     }

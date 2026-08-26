@@ -65,6 +65,9 @@ Thumbs.db
 .env.*.local
 *.env
 
+# Secret key material (RSA keypairs, etc.) — never commit real keys
+secrets/
+
 # Docker
 docker-compose.override.yml
 

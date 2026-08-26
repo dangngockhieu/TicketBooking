@@ -37,8 +37,11 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
 
-# Cấu hình Token JWT (Nạp trực tiếp từ biến môi trường .env)
+# Cấu hình Token JWT — RS256 (RSA Asymmetric Keys). Key đọc từ file (base64 DER: PKCS8 private / X509 public),
+# đường dẫn file trỏ tới bởi biến môi trường, KHÔNG lưu nội dung key trực tiếp trong .env
 jwt:
-  secret: ${JWT_SECRET}
+  private-key-path: ${JWT_PRIVATE_KEY_PATH}
+  public-key-path: ${JWT_PUBLIC_KEY_PATH}
+  key-id: ${JWT_KEY_ID:auth-key-1}
   access-token-expiration-seconds: ${JWT_ACCESS_TOKEN_EXPIRATION_SECONDS}
   refresh-token-expiration-seconds: ${JWT_REFRESH_TOKEN_EXPIRATION_SECONDS}

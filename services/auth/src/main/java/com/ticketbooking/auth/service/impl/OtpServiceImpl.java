@@ -1,5 +1,6 @@
 package com.ticketbooking.auth.service.impl;
 
+import com.ticketbooking.auth.service.OtpPurpose;
 import com.ticketbooking.auth.service.OtpService;
 import com.ticketbooking.common.exception.BadRequestException;
 import com.ticketbooking.common.exception.InvalidTokenException;
@@ -16,8 +17,6 @@ import java.util.UUID;
 @Service
 public class OtpServiceImpl implements OtpService {
 
-    private static final String OTP_KEY_PREFIX = "email_verify:";
-    private static final String COOLDOWN_KEY_PREFIX = "email_verify_cooldown:";
     private static final Duration OTP_TTL = Duration.ofMinutes(5);
     private static final Duration COOLDOWN_TTL = Duration.ofSeconds(60);
 
@@ -29,8 +28,8 @@ public class OtpServiceImpl implements OtpService {
     }
 
     @Override
-    public String issueOtp(UUID accountId) {
-        String cooldownKey = COOLDOWN_KEY_PREFIX + accountId;
+    public String issueOtp(UUID accountId, OtpPurpose purpose) {
+        String cooldownKey = cooldownKey(accountId, purpose);
         Boolean cooldownActive = redisTemplate.hasKey(cooldownKey);
         if (Boolean.TRUE.equals(cooldownActive)) {
             throw new TooManyRequestsException(
@@ -38,21 +37,21 @@ public class OtpServiceImpl implements OtpService {
         }
 
         String otp = generateOtp();
-        String otpKey = OTP_KEY_PREFIX + accountId;
+        String otpKey = otpKey(accountId, purpose);
         redisTemplate.opsForValue().set(otpKey, otp, OTP_TTL);
         redisTemplate.opsForValue().set(cooldownKey, "1", COOLDOWN_TTL);
 
         // ⏳ Gửi email OTP thật qua Kafka + notification-service chưa triển khai
         // (notification-service chưa tồn tại trong repo — xem docs/technical-flows.md §0.4).
         // Tạm thời log ra console để test thủ công ở môi trường dev.
-        log.info("[DEV-ONLY] OTP xác thực email cho account {}: {}", accountId, otp);
+        log.info("[DEV-ONLY] OTP ({}) cho account {}: {}", purpose, accountId, otp);
 
         return otp;
     }
 
     @Override
-    public void verifyOtp(UUID accountId, String otp) {
-        String otpKey = OTP_KEY_PREFIX + accountId;
+    public void verifyOtp(UUID accountId, String otp, OtpPurpose purpose) {
+        String otpKey = otpKey(accountId, purpose);
         String storedOtp = redisTemplate.opsForValue().get(otpKey);
 
         if (storedOtp == null) {
@@ -65,6 +64,14 @@ public class OtpServiceImpl implements OtpService {
         }
 
         redisTemplate.delete(otpKey);
+    }
+
+    private static String otpKey(UUID accountId, OtpPurpose purpose) {
+        return "otp:" + purpose.name() + ":" + accountId;
+    }
+
+    private static String cooldownKey(UUID accountId, OtpPurpose purpose) {
+        return "otp_cooldown:" + purpose.name() + ":" + accountId;
     }
 
     private String generateOtp() {

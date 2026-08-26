@@ -2,8 +2,10 @@ package com.ticketbooking.auth.service;
 
 import com.ticketbooking.auth.dto.request.AdminCreateOrganizerRequest;
 import com.ticketbooking.auth.dto.request.ChangePasswordRequest;
+import com.ticketbooking.auth.dto.request.ForgotPasswordRequest;
 import com.ticketbooking.auth.dto.request.LoginRequest;
 import com.ticketbooking.auth.dto.request.RegisterRequest;
+import com.ticketbooking.auth.dto.request.ResetPasswordRequest;
 import com.ticketbooking.auth.dto.request.VerifyEmailRequest;
 import com.ticketbooking.auth.dto.response.AdminCreateOrganizerResponse;
 import com.ticketbooking.auth.dto.response.AuthResponse;
@@ -21,6 +23,7 @@ import com.ticketbooking.common.exception.BadRequestException;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.common.exception.InvalidCredentialsException;
 import com.ticketbooking.common.exception.InvalidTokenException;
+import com.ticketbooking.common.exception.ResourceNotFoundException;
 import com.ticketbooking.common.exception.UnauthorizedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,7 +97,7 @@ class AuthServiceImplTest {
         // Đăng ký công khai luôn tạo tài khoản PENDING, chờ xác thực OTP
         assertEquals("PENDING", result.status());
         verify(accountRepository).save(any(Account.class));
-        verify(otpService).issueOtp(result.id());
+        verify(otpService).issueOtp(result.id(), OtpPurpose.EMAIL_VERIFICATION);
     }
 
     @Test
@@ -191,7 +194,7 @@ class AuthServiceImplTest {
 
         LoginResult result = authService.verifyEmail(request, ClientType.WEB);
 
-        verify(otpService).verifyOtp(accountId, "123456");
+        verify(otpService).verifyOtp(accountId, "123456", OtpPurpose.EMAIL_VERIFICATION);
         assertEquals(AccountStatus.ACTIVE, pendingAccount.getStatus());
         assertEquals("ACTIVE", result.authResponse().user().status());
         verify(accountRepository).save(pendingAccount);
@@ -203,7 +206,58 @@ class AuthServiceImplTest {
         when(accountRepository.findByEmail("user@example.com")).thenReturn(Optional.of(testAccount));
 
         assertThrows(ConflictException.class, () -> authService.verifyEmail(request, ClientType.WEB));
-        verify(otpService, never()).verifyOtp(any(), any());
+        verify(otpService, never()).verifyOtp(any(), any(), any());
+    }
+
+    @Test
+    void testForgotPasswordExistingAccount_IssuesOtp() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("user@example.com");
+        when(accountRepository.findByEmail("user@example.com")).thenReturn(Optional.of(testAccount));
+
+        authService.forgotPassword(request);
+
+        verify(otpService).issueOtp(accountId, OtpPurpose.PASSWORD_RESET);
+    }
+
+    @Test
+    void testForgotPasswordUnknownAccount_DoesNotThrowOrIssueOtp() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("unknown@example.com");
+        when(accountRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+
+        assertDoesNotThrow(() -> authService.forgotPassword(request));
+        verify(otpService, never()).issueOtp(any(), any());
+    }
+
+    @Test
+    void testResetPasswordSuccess_ChangesPasswordAndRevokesTokens() {
+        ResetPasswordRequest request = new ResetPasswordRequest("user@example.com", "123456", "new_password123");
+        when(accountRepository.findByEmail("user@example.com")).thenReturn(Optional.of(testAccount));
+        when(passwordEncoder.encode("new_password123")).thenReturn("hashed_new_password");
+
+        authService.resetPassword(request);
+
+        verify(otpService).verifyOtp(accountId, "123456", OtpPurpose.PASSWORD_RESET);
+        assertEquals("hashed_new_password", testAccount.getPasswordHash());
+        verify(refreshTokenRepository).revokeAllByAccountId(accountId);
+    }
+
+    @Test
+    void testResetPasswordUnknownAccount_ThrowsResourceNotFound() {
+        ResetPasswordRequest request = new ResetPasswordRequest("unknown@example.com", "123456", "new_password123");
+        when(accountRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> authService.resetPassword(request));
+        verify(otpService, never()).verifyOtp(any(), any(), any());
+    }
+
+    @Test
+    void testResetPasswordExpiredOtp_ThrowsBadRequestInsteadOf401() {
+        ResetPasswordRequest request = new ResetPasswordRequest("user@example.com", "123456", "new_password123");
+        when(accountRepository.findByEmail("user@example.com")).thenReturn(Optional.of(testAccount));
+        doThrow(new InvalidTokenException("Mã OTP đã hết hạn hoặc không tồn tại. Vui lòng yêu cầu gửi lại mã."))
+                .when(otpService).verifyOtp(accountId, "123456", OtpPurpose.PASSWORD_RESET);
+
+        assertThrows(BadRequestException.class, () -> authService.resetPassword(request));
     }
 
     @Test

@@ -2,9 +2,11 @@ package com.ticketbooking.auth.service.impl;
 
 import com.ticketbooking.auth.dto.request.AdminCreateOrganizerRequest;
 import com.ticketbooking.auth.dto.request.ChangePasswordRequest;
+import com.ticketbooking.auth.dto.request.ForgotPasswordRequest;
 import com.ticketbooking.auth.dto.request.LoginRequest;
 import com.ticketbooking.auth.dto.request.RegisterRequest;
 import com.ticketbooking.auth.dto.request.ResendVerificationRequest;
+import com.ticketbooking.auth.dto.request.ResetPasswordRequest;
 import com.ticketbooking.auth.dto.request.VerifyEmailRequest;
 import com.ticketbooking.auth.dto.response.AdminCreateOrganizerResponse;
 import com.ticketbooking.auth.dto.response.AuthResponse;
@@ -18,6 +20,7 @@ import com.ticketbooking.auth.repository.AccountRepository;
 import com.ticketbooking.auth.repository.RefreshTokenRepository;
 import com.ticketbooking.auth.security.JwtTokenProvider;
 import com.ticketbooking.auth.service.AuthService;
+import com.ticketbooking.auth.service.OtpPurpose;
 import com.ticketbooking.auth.service.OtpService;
 import com.ticketbooking.auth.util.TempPasswordGenerator;
 import com.ticketbooking.common.exception.*;
@@ -67,7 +70,7 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         Account saved = accountRepository.save(account);
-        otpService.issueOtp(saved.getId());
+        otpService.issueOtp(saved.getId(), OtpPurpose.EMAIL_VERIFICATION);
 
         return toUserInfo(saved);
     }
@@ -85,7 +88,7 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ ban quản trị.");
         }
 
-        otpService.verifyOtp(account.getId(), request.otp());
+        otpService.verifyOtp(account.getId(), request.otp(), OtpPurpose.EMAIL_VERIFICATION);
 
         account.setStatus(AccountStatus.ACTIVE);
         accountRepository.save(account);
@@ -106,7 +109,7 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ ban quản trị.");
         }
 
-        otpService.issueOtp(account.getId());
+        otpService.issueOtp(account.getId(), OtpPurpose.EMAIL_VERIFICATION);
     }
 
     @Override
@@ -244,6 +247,38 @@ public class AuthServiceImpl implements AuthService {
         // notification-service (chưa triển khai). Tạm thời trả về trong response
         // (xem AdminCreateOrganizerResponse) để Admin tự chuyển giao qua kênh khác.
         return new AdminCreateOrganizerResponse(toUserInfo(saved), tempPassword);
+    }
+
+    @Override
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String email = request.email().trim().toLowerCase();
+        // Im lặng bỏ qua nếu không tìm thấy tài khoản — endpoint này luôn trả 200
+        // để không tiết lộ email nào đã đăng ký (chống account enumeration).
+        accountRepository.findByEmail(email)
+                .ifPresent(account -> otpService.issueOtp(account.getId(), OtpPurpose.PASSWORD_RESET));
+    }
+
+    @Override
+    public void resetPassword(ResetPasswordRequest request) {
+        String email = request.email().trim().toLowerCase();
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy tài khoản ứng với email này."));
+
+        try {
+            otpService.verifyOtp(account.getId(), request.otp(), OtpPurpose.PASSWORD_RESET);
+        } catch (InvalidTokenException e) {
+            // Chuẩn hóa "OTP hết hạn/không tồn tại" về 400 (thay vì 401 mặc định của
+            // InvalidTokenException) để khớp field-level error như FE mong đợi —
+            // xem docs/04-auth-flow.md §3.3d (repo FE).
+            throw new BadRequestException(e.getMessage());
+        }
+
+        account.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        account.setRequirePasswordChange(false);
+        accountRepository.save(account);
+
+        // Giống change-password: không tự đăng nhập lại, thu hồi mọi phiên hiện có.
+        refreshTokenRepository.revokeAllByAccountId(account.getId());
     }
 
     private LoginResult issueSession(Account account, ClientType clientType) {

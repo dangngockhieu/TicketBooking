@@ -10,7 +10,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
         "spring.cloud.config.enabled=false",
         "eureka.client.enabled=false",
         "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.orm.jpa.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
-        "jwt.secret=a_very_long_secret_key_ticket_booking_system_32_bytes_min",
+        "jwt.private-key-path=src/test/resources/keys/private-test.key",
+        "jwt.public-key-path=src/test/resources/keys/public-test.key",
+        "jwt.key-id=test-key-1",
         "jwt.access-token-expiration-seconds=3600",
         "jwt.refresh-token-expiration-seconds=86400"
 })

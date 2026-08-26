@@ -38,7 +38,7 @@ public class JwtTokenProvider {
                 .claim("permissions", authorities)
                 .build();
 
-        JwsHeader jwsHeader = JwsHeader.with(JwtProperties.JWT_ALGORITHM).build();
+        JwsHeader jwsHeader = JwsHeader.with(JwtProperties.JWT_ALGORITHM).keyId(jwtProperties.keyId()).build();
         return this.jwtEncoder.encode(JwtEncoderParameters.from(jwsHeader, claims)).getTokenValue();
     }
 
@@ -52,7 +52,7 @@ public class JwtTokenProvider {
                 .subject(email)
                 .build();
 
-        JwsHeader jwsHeader = JwsHeader.with(JwtProperties.JWT_ALGORITHM).build();
+        JwsHeader jwsHeader = JwsHeader.with(JwtProperties.JWT_ALGORITHM).keyId(jwtProperties.keyId()).build();
         return this.jwtEncoder.encode(JwtEncoderParameters.from(jwsHeader, claims)).getTokenValue();
     }
 
