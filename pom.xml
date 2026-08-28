@@ -25,6 +25,7 @@
         <module>services/config-server</module>
         <module>services/auth</module>
         <module>services/user</module>
+        <module>services/api-gateway</module>
     </modules>
 
     <properties>
