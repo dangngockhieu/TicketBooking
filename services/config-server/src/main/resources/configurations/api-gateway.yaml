@@ -1,0 +1,32 @@
+# ==============================================================================
+# API GATEWAY CONFIGURATION (PHÂN PHỐI BỞI CONFIG SERVER)
+# Xem thiết kế đầy đủ: docs/system-design.md §9
+# ==============================================================================
+server:
+  port: 8080
+
+spring:
+  cloud:
+    gateway:
+      # §9.1 — Route Table: định tuyến theo Path, forward qua Eureka (lb://<service-id>)
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+        - id: auth-service-jwks
+          uri: lb://auth-service
+          predicates:
+            - Path=/.well-known/jwks.json
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+
+  # §9.2 — JWT sơ bộ tại Gateway. Cùng jwk-set-uri với user-service: chỉ verify
+  # bằng Public Key (Zero Trust), không giữ bí mật nào của auth-service.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8081/.well-known/jwks.json
