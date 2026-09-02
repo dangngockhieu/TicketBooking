@@ -1,5 +1,6 @@
 package com.ticketbooking.user;
 
+import com.ticketbooking.user.repository.OrganizerBankAccountRepository;
 import com.ticketbooking.user.repository.ProfileRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,6 +16,9 @@ class UserApplicationTests {
 
 	@MockitoBean
 	private ProfileRepository profileRepository;
+
+	@MockitoBean
+	private OrganizerBankAccountRepository organizerBankAccountRepository;
 
 	@Test
 	void contextLoads() {

@@ -41,7 +41,10 @@ public class Profile {
     @Column(name = "user_type", nullable = false, length = 20)
     private UserType userType;
 
-    /** Dữ liệu mở rộng: sở thích (Customer), KYC ngân hàng/thuế (Organizer). */
+    /**
+     * Dữ liệu mở rộng: sở thích (Customer), giấy phép tổ chức sự kiện (Organizer).
+     * KHÔNG chứa tài khoản ngân hàng — xem {@link com.ticketbooking.user.entity.OrganizerBankAccount}.
+     */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     @Builder.Default
