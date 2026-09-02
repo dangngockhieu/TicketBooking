@@ -82,7 +82,7 @@ TTL:    60 seconds                    # chống spam nút "Gửi lại mã"
 | `phone_number` | `VARCHAR(20)` | UNIQUE | Số điện thoại |
 | `avatar_url` | `VARCHAR(500)` | | URL ảnh đại diện |
 | `user_type` | `VARCHAR(20)` | NOT NULL | `CUSTOMER` hoặc `ORGANIZER` |
-| `metadata` | `JSONB` | DEFAULT '{}'::jsonb | Dữ liệu mở rộng (sở thích nhạc, KYC ngân hàng/thuế) |
+| `metadata` | `JSONB` | DEFAULT '{}'::jsonb | Dữ liệu mở rộng (sở thích nhạc cho Customer, giấy phép tổ chức cho Organizer — **KHÔNG chứa tài khoản ngân hàng**, xem bảng `organizer_bank_accounts`) |
 | `created_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày tạo |
 | `updated_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày cập nhật |
 
@@ -103,6 +103,40 @@ CREATE INDEX idx_profiles_account_id ON profiles(account_id);
 CREATE INDEX idx_profiles_phone ON profiles(phone_number);
 CREATE INDEX idx_profiles_metadata ON profiles USING GIN (metadata);
 ```
+
+### Bảng `organizer_bank_accounts` 🆕
+
+> **1 Organizer = đúng 1 tài khoản ngân hàng cố định** — ép cứng ở tầng DB bằng `UNIQUE` trên `profile_id`, không cho phép nhiều tài khoản. Tách bảng riêng (không nhét vào `profiles.metadata`) vì đây là dữ liệu nhạy cảm dùng để chi tiền thật (payout) — cần ràng buộc SQL chặt (`NOT NULL`) và cột xác minh riêng, không thể là JSONB tự do. Đổi tài khoản phải qua luồng riêng có kiểm soát (Admin xác minh lại), không phải sửa tự do như các trường hồ sơ khác — xem `technical-flows.md §4b`.
+
+| Cột | Kiểu | Ràng buộc | Mô tả |
+|-----|------|-----------|--------|
+| `id` | `UUID` | **PK** | Mã bản ghi |
+| `profile_id` | `UUID` | **FK** → profiles, **UNIQUE**, NOT NULL | 🔗 Hard FK (cùng DB `user_db`) — ép 1-1 với Organizer |
+| `bank_name` | `VARCHAR(100)` | NOT NULL | Tên ngân hàng |
+| `bank_account_number` | `VARCHAR(50)` | NOT NULL | Số tài khoản |
+| `bank_account_holder` | `VARCHAR(255)` | NOT NULL | Tên chủ tài khoản |
+| `verified` | `BOOLEAN` | NOT NULL, DEFAULT FALSE | Admin đã xác minh khớp với hồ sơ pháp lý Organizer chưa |
+| `verified_at` | `TIMESTAMP` | | Thời điểm xác minh |
+| `created_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày tạo |
+| `updated_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | Ngày cập nhật (mỗi lần đổi số TK) |
+
+```sql
+CREATE TABLE organizer_bank_accounts (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id           UUID         NOT NULL UNIQUE REFERENCES profiles(id),
+    bank_name            VARCHAR(100) NOT NULL,
+    bank_account_number  VARCHAR(50)  NOT NULL,
+    bank_account_holder  VARCHAR(255) NOT NULL,
+    verified             BOOLEAN      NOT NULL DEFAULT FALSE,
+    verified_at          TIMESTAMP,
+    created_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_organizer_bank_accounts_profile ON organizer_bank_accounts(profile_id);
+```
+
+> `payment-service` không có bảng riêng chứa số tài khoản ngân hàng — khi tạo/xử lý `payout_requests`, nó gọi API sang `user-service` (soft-key `organizer_id` → `profiles.account_id`) để lấy bản ghi đã xác minh, rồi **snapshot** 3 cột `bank_name/bank_account_number/bank_account_holder` vào chính `payout_requests` tại thời điểm tạo (xem bảng bên dưới) — để giữ vết lịch sử "đã chuyển đúng số TK nào", KHÔNG phải để client tự điền.
 
 ---
 
@@ -359,23 +393,17 @@ CREATE INDEX idx_transactions_booking ON transactions(booking_id);
 CREATE INDEX idx_transactions_status ON transactions(status);
 CREATE INDEX idx_transactions_gateway ON transactions(gateway_trans_id);
 ```
-### Bảng `payout_requests` 🆕
+
+### Bảng `organizer_wallets` 🆕
 
 | Cột | Kiểu | Ràng buộc | Mô tả |
 |-----|------|-----------|--------|
 | `id` | `UUID` | **PK** | |
-| `organizer_id` | `UUID` | NOT NULL | 🔗 Soft Key → Auth.accounts |
-| `amount` | `DECIMAL(15,2)` | NOT NULL | Số tiền yêu cầu rút |
-| `bank_name` | `VARCHAR(100)` | NOT NULL | |
-| `bank_account_number` | `VARCHAR(50)` | NOT NULL | |
-| `bank_account_holder` | `VARCHAR(255)` | NOT NULL | |
-| `status` | `ENUM` | NOT NULL, DEFAULT 'PENDING' | `PENDING`/`APPROVED`/`REJECTED`/`PAID`/`HOLD` |
-| `source` | `ENUM` | NOT NULL | `AUTO` (job nền 7 ngày sau event) / `MANUAL` (Organizer tự xin) |
-| `event_id` | `UUID` | NULL | 🔗 Soft Key → Catalog.events (chỉ khi `source=AUTO`) |
-| `reason` | `TEXT` | NULL | Bắt buộc khi `REJECTED` hoặc `HOLD` |
-| `momo_disbursement_id` | `VARCHAR(255)` | NULL, UNIQUE | `requestId` gửi lên MoMo Disbursement API, dùng để đối soát/tránh gọi trùng |
-| `created_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | |
-| `processed_at` | `TIMESTAMP` | NULL | Thời điểm chuyển sang trạng thái cuối (`PAID`/`REJECTED`) |
+| `organizer_id` | `UUID` | **UNIQUE**, NOT NULL | 🔗 Soft Key → Auth.accounts |
+| `available_balance` | `DECIMAL(15,2)` | NOT NULL, DEFAULT 0 | Số dư khả dụng, có thể xin rút |
+| `pending_payout` | `DECIMAL(15,2)` | NOT NULL, DEFAULT 0 | Đang chờ xử lý payout |
+| `total_withdrawn` | `DECIMAL(15,2)` | NOT NULL, DEFAULT 0 | Tổng đã rút thành công (lũy kế) |
+| `updated_at` | `TIMESTAMP` | NOT NULL, DEFAULT NOW() | |
 
 ```sql
 CREATE TABLE organizer_wallets (
@@ -397,9 +425,9 @@ CREATE INDEX idx_organizer_wallets_organizer ON organizer_wallets(organizer_id);
 | `id` | `UUID` | **PK** | |
 | `organizer_id` | `UUID` | NOT NULL | 🔗 Soft Key → Auth.accounts |
 | `amount` | `DECIMAL(15,2)` | NOT NULL | Số tiền yêu cầu rút |
-| `bank_name` | `VARCHAR(100)` | NOT NULL | |
-| `bank_account_number` | `VARCHAR(50)` | NOT NULL | |
-| `bank_account_holder` | `VARCHAR(255)` | NOT NULL | |
+| `bank_name` | `VARCHAR(100)` | NOT NULL | **Snapshot tự động** từ `organizer_bank_accounts` (User Service) tại thời điểm tạo — KHÔNG do client điền |
+| `bank_account_number` | `VARCHAR(50)` | NOT NULL | Snapshot tự động, xem trên |
+| `bank_account_holder` | `VARCHAR(255)` | NOT NULL | Snapshot tự động, xem trên |
 | `status` | `ENUM` | NOT NULL, DEFAULT 'PENDING' | `PENDING`/`APPROVED`/`REJECTED`/`PAID`/`HOLD` |
 | `source` | `ENUM` | NOT NULL | `AUTO` (job nền 7 ngày sau event) / `MANUAL` (Organizer tự xin) |
 | `event_id` | `UUID` | NULL | 🔗 Soft Key → Catalog.events (chỉ khi `source=AUTO`) |
@@ -413,6 +441,8 @@ CREATE TABLE payout_requests (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organizer_id          UUID           NOT NULL,  -- Soft Key → Auth Service
     amount                DECIMAL(15, 2) NOT NULL CHECK (amount > 0),
+    -- 3 cột dưới là snapshot tự động lấy từ organizer_bank_accounts (User Service)
+    -- tại thời điểm tạo request — KHÔNG phải field client tự điền
     bank_name             VARCHAR(100)   NOT NULL,
     bank_account_number   VARCHAR(50)    NOT NULL,
     bank_account_holder   VARCHAR(255)   NOT NULL,

@@ -51,7 +51,7 @@ B2B2C (Mô hình đóng)
 * **UC-O2: Quản lý hạng vé:** Định nghĩa hạng vé (VVIP, VIP, GA), giá tiền và giới hạn số lượng phát hành.
 * **UC-O3: Kiểm soát vé (Check-in QR):** Dùng ứng dụng quét mã QR tại cổng sự kiện để đối chiếu và xác nhận vào cổng (chặn quét trùng).
 * **UC-O4: Báo cáo & Thống kê:** Xem dashboard doanh thu thực tế (gross), phí nền tảng, doanh thu ròng, số vé bán ra và tỷ lệ lấp đầy.
-* **UC-O5: Ví & Rút tiền:** Xem số dư khả dụng (doanh thu ròng sau phí nền tảng), tiền tự động chuyển về sau 7 ngày kể từ khi sự kiện kết thúc, hoặc chủ động xin rút sớm hơn qua MoMo Business Disbursement.
+* **UC-O5: Ví & Rút tiền:** Xem số dư khả dụng (doanh thu ròng sau phí nền tảng), tiền tự động chuyển về sau 7 ngày kể từ khi sự kiện kết thúc, hoặc chủ động xin rút sớm hơn qua MoMo Business Disbursement. Trước đó phải thiết lập **đúng 1 tài khoản ngân hàng cố định** (User Service) và được Admin xác minh — đổi tài khoản luôn cần xác minh lại, chống chiếm đoạt tài khoản đổi nơi nhận tiền.
 
 ### 2.3. Admin (Quản trị viên)
 * **UC-A1: Quản lý Organizer:** Phê duyệt/khóa tài khoản Organizer sau khi kiểm tra giấy phép tổ chức.

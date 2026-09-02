@@ -960,7 +960,52 @@ GET /organizer/wallet
 
 > `availableBalance` = Σ `netRevenue` của mọi sự kiện đã `COMPLETED`, trừ đi các payout đang `PENDING`/`APPROVED`/`HOLD`/`PAID`.
 
-### 7.3. Yêu cầu rút tiền 🔒 (ORGANIZER) 🆕
+### 7.3. Tài khoản ngân hàng nhận tiền 🔒 (ORGANIZER) 🆕
+
+> **1 Organizer = đúng 1 tài khoản ngân hàng cố định** (ép ở tầng DB, xem `database-schema.md` bảng `organizer_bank_accounts`). Client **không** được gửi thông tin ngân hàng kèm mỗi request payout — phải thiết lập/xác minh trước qua API riêng này.
+
+```http
+GET /organizer/bank-account
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "bankName": "Vietcombank",
+    "bankAccountNumber": "0071000123456",
+    "bankAccountHolder": "CONG TY TNHH ABC",
+    "verified": true,
+    "verifiedAt": "2026-09-20T09:00:00+07:00"
+  }
+}
+```
+
+> `data: null` nếu Organizer chưa từng thiết lập tài khoản ngân hàng.
+
+```http
+PUT /organizer/bank-account
+```
+
+**Request Body:**
+```json
+{
+  "bankName": "Vietcombank",
+  "bankAccountNumber": "0071000123456",
+  "bankAccountHolder": "CONG TY TNHH ABC"
+}
+```
+
+> Tạo mới hoặc **thay thế** tài khoản hiện có (upsert theo `profile_id`, không có khái niệm "nhiều tài khoản"). Mỗi lần thay thế, `verified` reset về `false` — bắt buộc Admin xác minh lại trước khi dùng được cho payout (chống chiếm đoạt tài khoản rồi đổi ngân hàng nhận tiền ngay lập tức). Trong lúc `verified = false`, mọi request `POST /organizer/payouts` (§7.4) bị từ chối (409 `BANK_ACCOUNT_NOT_VERIFIED`).
+
+```http
+PATCH /admin/organizers/{organizerId}/bank-account/verify
+```
+
+> **ADMIN** xác minh thủ công (đối chiếu giấy phép kinh doanh/CCCD đã thẩm định lúc `POST /admin/organizers`) → `verified = true`, `verifiedAt = now()`.
+
+### 7.4. Yêu cầu rút tiền 🔒 (ORGANIZER) 🆕
 
 ```http
 POST /organizer/payouts
@@ -969,22 +1014,17 @@ POST /organizer/payouts
 **Request Body:**
 ```json
 {
-  "amount": 50000000,
-  "bankAccount": {
-    "bankName": "Vietcombank",
-    "accountNumber": "0071000123456",
-    "accountHolderName": "CONG TY TNHH ABC"
-  }
+  "amount": 50000000
 }
 ```
 
-> Tạo yêu cầu `status: PENDING`, `source: MANUAL`. Từ chối nếu `amount > availableBalance` (409) hoặc `amount ≤ 0` (400).
+> Tạo yêu cầu `status: PENDING`, `source: MANUAL`. Backend **tự tra cứu** tài khoản ngân hàng đã xác minh của Organizer (§7.3) rồi snapshot vào `payout_requests.bank_name/bank_account_number/bank_account_holder` — client không gửi, không chọn được tài khoản khác. Từ chối nếu: `amount > availableBalance` (409 `INSUFFICIENT_BALANCE`), `amount ≤ 0` (400), hoặc chưa có tài khoản ngân hàng đã xác minh (409 `BANK_ACCOUNT_NOT_VERIFIED`).
 
 ```http
 GET /organizer/payouts?status={status}&page=1&size=20
 ```
 
-### 7.4. Payout tự động & Chi trả qua MoMo Disbursement 🆕
+### 7.5. Payout tự động & Chi trả qua MoMo Disbursement 🆕
 
 > Theo mô hình Ticketbox/Eventbrite: tiền tự động về cho Organizer, không cần chủ động xin.
 

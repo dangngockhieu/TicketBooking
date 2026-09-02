@@ -451,7 +451,28 @@ phí/vé = giá vé × commissionRate + flatFeePerTicket
 - Vé giá 0đ **luôn miễn phí hoàn toàn**, không tính `flatFeePerTicket`.
 - Chỉ ADMIN sửa được `commissionRate`/`flatFeePerTicket`, sửa riêng theo từng sự kiện (`PATCH /admin/events/{eventId}/commission`) — dùng khi đàm phán đối tác lớn hoặc sự kiện thiện nguyện.
 
-### 4b.2. Job nền tạo Payout tự động
+### 4b.2. Thiết lập & xác minh tài khoản ngân hàng nhận tiền 🆕
+
+> **1 Organizer = đúng 1 tài khoản ngân hàng cố định**, lưu ở **User Service** (bảng `organizer_bank_accounts`, xem `database-schema.md`), KHÔNG lưu ở Payment Service và KHÔNG do client gửi kèm mỗi request payout — xem `api-design.md §7.3`.
+
+```
+Organizer                     User Service                  Admin
+    │                              │                           │
+    │──PUT /organizer/bank-account►│                           │
+    │  { bankName, accountNumber,  │──upsert theo profile_id    │
+    │    accountHolder }           │  (UNIQUE constraint)       │
+    │                              │──verified = false ◄────────┤ (reset mỗi lần đổi TK)
+    │◄──200 { verified: false }────│                           │
+    │                              │                           │
+    │           (Admin đối chiếu giấy phép kinh doanh/CCCD ngoài hệ thống)
+    │                              │◄──PATCH .../bank-account/verify
+    │                              │──verified = true, verifiedAt = now()
+```
+
+- Đổi tài khoản ngân hàng **luôn reset `verified = false`** — chống kịch bản tài khoản Organizer bị chiếm đoạt rồi đổi ngay số TK nhận tiền để rút trộm.
+- Payment Service (cả luồng AUTO lẫn MANUAL ở dưới) **bắt buộc gọi `GET` nội bộ sang User Service** để lấy tài khoản ngân hàng đã `verified = true` trước khi tạo/duyệt payout — chưa xác minh thì không tạo được payout.
+
+### 4b.3. Job nền tạo Payout tự động
 
 ```java
 // Chạy 1 lần/ngày, quét các event COMPLETED đã đủ 7 ngày kể từ endTime
@@ -465,19 +486,32 @@ public void createAutoPayouts() {
         BigDecimal netRevenue = calculateNetRevenue(event); // Σ (giá vé - phí/vé) × sold
         if (netRevenue.compareTo(BigDecimal.ZERO) <= 0) continue;
 
-        PayoutRequest payout = PayoutRequest.builder()
+        // Tra cứu tài khoản ngân hàng đã xác minh của Organizer (gọi User Service)
+        Optional<VerifiedBankAccount> bankAccount = userServiceClient.getVerifiedBankAccount(event.getOrganizerId());
+
+        PayoutRequest.PayoutRequestBuilder builder = PayoutRequest.builder()
             .organizerId(event.getOrganizerId())
             .amount(netRevenue)
-            .status(PayoutStatus.PENDING)
             .source(PayoutSource.AUTO)
-            .eventId(event.getId())
-            .build();
-        payoutRepo.save(payout);
+            .eventId(event.getId());
+
+        if (bankAccount.isPresent()) {
+            // Snapshot bank info tại thời điểm tạo — không tham chiếu ngược lại User Service nữa
+            builder.status(PayoutStatus.PENDING)
+                   .bankName(bankAccount.get().bankName())
+                   .bankAccountNumber(bankAccount.get().accountNumber())
+                   .bankAccountHolder(bankAccount.get().accountHolder());
+        } else {
+            // Chưa có tài khoản ngân hàng đã xác minh → HOLD, không được PAID cho tới khi Organizer thiết lập
+            builder.status(PayoutStatus.HOLD)
+                   .reason("Organizer chưa thiết lập/xác minh tài khoản ngân hàng nhận tiền.");
+        }
+        payoutRepo.save(builder.build());
     }
 }
 ```
 
-### 4b.3. Duyệt & chi trả qua MoMo Disbursement
+### 4b.4. Duyệt & chi trả qua MoMo Disbursement
 
 ```
 Organizer                Admin                Payout/Payment Service               MoMo Disbursement API
@@ -499,8 +533,9 @@ Organizer                Admin                Payout/Payment Service            
     │◄──nhận tiền vào TK ngân hàng/ví MoMo───────────────────────────────────────────────────│
 ```
 
-- **HOLD**: Admin có thể tạm giữ payout ở bất kỳ trạng thái nào trước `PAID` (nghi ngờ gian lận/khiếu nại) — bắt buộc nhập `reason`. Mở lại → về `PENDING`.
+- **HOLD**: Admin có thể tạm giữ payout ở bất kỳ trạng thái nào trước `PAID` (nghi ngờ gian lận/khiếu nại) — bắt buộc nhập `reason`. Cũng tự động xảy ra khi tạo payout AUTO mà Organizer chưa có tài khoản ngân hàng đã xác minh (§4b.2). Mở lại → về `PENDING`.
 - **REJECTED**: chỉ áp dụng cho payout `source=MANUAL` (Organizer tự xin) — bắt buộc nhập `reason`.
+- Payout `source=MANUAL` (`POST /organizer/payouts`, `api-design.md §7.4`) bị từ chối ngay tại API (409 `BANK_ACCOUNT_NOT_VERIFIED`) nếu Organizer chưa có tài khoản ngân hàng `verified = true` — không tạo ra bản ghi `PENDING` rồi mới HOLD như luồng AUTO.
 - `PAID` là trạng thái cuối, không đổi được nữa.
 - IPN của Disbursement là endpoint **riêng** với IPN thanh toán (mục 5.2 `api-design.md`) — MoMo phân biệt 2 luồng callback khác nhau dù cùng chữ ký HMAC-SHA256.
 
