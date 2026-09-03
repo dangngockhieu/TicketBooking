@@ -1,0 +1,63 @@
+# ==============================================================================
+# BOOKING SERVICE CONFIGURATION (PHÂN PHỐI BỞI CONFIG SERVER)
+# ==============================================================================
+server:
+  port: 8084
+
+spring:
+  # Cấu hình kết nối PostgreSQL (Container postgres-booking :5436)
+  datasource:
+    url: jdbc:postgresql://${BOOKING_DB_HOST}:${BOOKING_DB_PORT}/${BOOKING_DB_NAME}
+    username: ${BOOKING_DB_USER}
+    password: ${BOOKING_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  # Cấu hình kết nối Redis (Container redis :6379) — Atomic Seat Hold (xem
+  # docs/database-schema.md §4 "Redis Keys", docs/technical-flows.md) và bắt
+  # sự kiện keyspace notification "expired" làm safety net nhả ghế tự động.
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+    web:
+      pageable:
+        one-indexed-parameters: true
+        default-page-size: 10
+        max-page-size: 50
+
+  # JPA & Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: validate # Flyway chịu trách nhiệm tạo bảng, JPA chỉ kiểm tra
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: Asia/Ho_Chi_Minh
+
+  # Flyway Database Migration
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  # OAuth2 Resource Server — CHỈ xác thực JWT bằng Public Key lấy từ JWKS của
+  # auth-service (Zero Trust). Xem docs/system-design.md §8, §9.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8081/.well-known/jwks.json
+
+# Nơi gọi sang Catalog Service để lấy thông tin sự kiện/hạng vé (giá, số vé còn
+# lại, cửa sổ mở bán) khi tạo đơn — trỏ qua Eureka bằng application name, không
+catalog-service:
+  name: catalog-service
+
+# Seat Hold — thời gian giữ chỗ trước khi tự động hủy đơn (xem
+booking:
+  hold:
+    ttl-seconds: 600

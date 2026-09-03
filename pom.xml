@@ -27,6 +27,7 @@
         <module>services/user</module>
         <module>services/api-gateway</module>
         <module>services/catalog</module>
+        <module>services/booking</module>
     </modules>
 
     <properties>
