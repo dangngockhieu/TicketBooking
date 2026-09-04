@@ -306,6 +306,8 @@ CREATE INDEX idx_bookings_expired ON bookings(status, expired_at)
 | `id` | `UUID` | **PK** | Mã vé |
 | `booking_id` | `UUID` | **FK** → bookings, NOT NULL | 🔗 Hard FK |
 | `ticket_class_id` | `UUID` | NOT NULL | 🔗 Soft Key → Catalog.ticket_classes |
+| `ticket_class_name` | `VARCHAR(100)` | NOT NULL | Snapshot tên hạng vé tại thời điểm đặt 🆕 |
+| `unit_price` | `DECIMAL(15,2)` | NOT NULL | Snapshot đơn giá tại thời điểm đặt — không đổi dù Organizer sửa giá sau đó 🆕 |
 | `qr_code_data` | `VARCHAR(255)` | UNIQUE, NOT NULL | Mã QR duy nhất (UUID) |
 | `status` | `ENUM` | NOT NULL, DEFAULT 'LOCKED' | Trạng thái vé |
 | `checked_in_at` | `TIMESTAMP` | | Thời điểm check-in |
@@ -321,18 +323,21 @@ ISSUED → CHECKED_IN (khi quét QR tại sự kiện)
 
 ```sql
 CREATE TABLE tickets (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    booking_id      UUID         NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
-    ticket_class_id UUID         NOT NULL,  -- Soft Key → Catalog Service
-    qr_code_data    VARCHAR(255) NOT NULL UNIQUE,
-    status          VARCHAR(20)  NOT NULL DEFAULT 'LOCKED'
-                    CHECK (status IN ('LOCKED', 'ISSUED', 'CANCELLED', 'CHECKED_IN')),
-    checked_in_at   TIMESTAMP,
-    created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMP    NOT NULL DEFAULT NOW()
+    id                UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    booking_id        UUID           NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+    ticket_class_id   UUID           NOT NULL,  -- Soft Key → Catalog Service
+    ticket_class_name VARCHAR(100)   NOT NULL,  -- Snapshot tại thời điểm đặt
+    unit_price        DECIMAL(15, 2) NOT NULL CHECK (unit_price >= 0), -- Snapshot tại thời điểm đặt
+    qr_code_data      VARCHAR(255)   NOT NULL UNIQUE,
+    status            VARCHAR(20)    NOT NULL DEFAULT 'LOCKED'
+                      CHECK (status IN ('LOCKED', 'ISSUED', 'CANCELLED', 'CHECKED_IN')),
+    checked_in_at     TIMESTAMP,
+    created_at        TIMESTAMP      NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMP      NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_tickets_booking ON tickets(booking_id);
+CREATE INDEX idx_tickets_ticket_class ON tickets(ticket_class_id);
 CREATE INDEX idx_tickets_qr_code ON tickets(qr_code_data);
 CREATE INDEX idx_tickets_status ON tickets(status);
 ```
