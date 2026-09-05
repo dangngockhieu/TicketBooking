@@ -22,6 +22,22 @@ spring:
           uri: lb://user-service
           predicates:
             - Path=/api/users/**
+        - id: catalog-service-events
+          uri: lb://catalog-service
+          predicates:
+            - Path=/api/events/**
+        - id: catalog-service-categories
+          uri: lb://catalog-service
+          predicates:
+            - Path=/api/categories/**
+        - id: catalog-service-admin-categories
+          uri: lb://catalog-service
+          predicates:
+            - Path=/api/admin/categories/**
+        - id: booking-service
+          uri: lb://booking-service
+          predicates:
+            - Path=/api/bookings/**
 
   # §9.2 — JWT sơ bộ tại Gateway. Cùng jwk-set-uri với user-service: chỉ verify
   # bằng Public Key (Zero Trust), không giữ bí mật nào của auth-service.
