@@ -28,6 +28,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     /** Dùng bởi scheduled job nhả ghế tự động (xem docs/development-plan.md GĐ3 mục 3). */
     List<Booking> findByStatusAndExpiredAtBefore(BookingStatus status, Instant threshold);
 
+    /** Dùng bởi Redis keyspace notification listener để tra cứu booking từ key {@code seat_hold:*} đã hết hạn. */
+    Optional<Booking> findFirstByCustomerIdAndEventIdAndStatus(UUID customerId, UUID eventId, BookingStatus status);
+
     /**
      * Chuyển sang CANCELLED chỉ khi đang PENDING_PAYMENT — trả về số dòng bị ảnh
      * hưởng (0 hoặc 1) để chống race giữa hủy thủ công, scheduled job và Redis
