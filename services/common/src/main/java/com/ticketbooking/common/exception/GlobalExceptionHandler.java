@@ -82,6 +82,12 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), null);
     }
 
+    @ExceptionHandler(BadGatewayException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBadGateway(BadGatewayException exception) {
+        log.error("Lỗi từ dịch vụ bên ngoài: {}", exception.getMessage());
+        return buildErrorResponse(HttpStatus.BAD_GATEWAY, exception.getMessage(), null);
+    }
+
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ApiResponse<Void>> handleMissingHeader(MissingRequestHeaderException exception) {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Thiếu header bắt buộc: " + exception.getHeaderName(), null);

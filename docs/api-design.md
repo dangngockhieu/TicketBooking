@@ -592,11 +592,12 @@ Content-Type: application/json
   "signature":   "<HMAC-SHA256>"
 }
 ```
-5. Chữ ký `signature` được tạo bằng **HMAC-SHA256** trên chuỗi raw:
+5. Chữ ký `signature` được tạo bằng **HMAC-SHA256** trên chuỗi raw (đúng chuẩn MoMo AIO — bắt buộc có `accessKey`, thiếu sẽ bị MoMo từ chối với lỗi checksum:
 ```
-rawSignature = "amount=3000000&extraData=&ipnUrl=...&orderId=...&orderInfo=...&partnerCode=MOMO&redirectUrl=...&requestId=...&requestType=captureWallet"
+rawSignature = "accessKey=...&amount=3000000&extraData=&ipnUrl=...&orderId=...&orderInfo=...&partnerCode=MOMO&redirectUrl=...&requestId=...&requestType=captureWallet"
 signature = HMAC_SHA256(rawSignature, secretKey)
 ```
+   `accessKey` cũng là một field bắt buộc trong JSON body gửi lên MoMo (không chỉ dùng để ký).
 6. Lưu `payUrl` từ MoMo vào transaction, trả về client.
 
 **Response (200):**
@@ -654,9 +655,9 @@ POST /payments/momo/ipn
 ```
 
 **Xử lý phía backend:**
-1. **Verify chữ ký HMAC-SHA256** trên raw string:
+1. **Verify chữ ký HMAC-SHA256** trên raw string (có `accessKey`, giống §5.1):
    ```
-   rawSignature = "amount=3000000&extraData=&message=Successful.&orderId=...&orderInfo=...&orderType=momo_wallet&partnerCode=MOMO&payType=qr&requestId=...&responseTime=...&resultCode=0&transId=4123456789"
+   rawSignature = "accessKey=...&amount=3000000&extraData=&message=Successful.&orderId=...&orderInfo=...&orderType=momo_wallet&partnerCode=MOMO&payType=qr&requestId=...&responseTime=...&resultCode=0&transId=4123456789"
    ```
    Nếu `signature` không khớp → **trả 400, dừng xử lý** (ngăn giả mạo callback).
 2. Kiểm tra `amount` khớp với booking (chống tấn công thay đổi số tiền).
