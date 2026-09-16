@@ -61,9 +61,13 @@ spring:
         jwt:
           jwk-set-uri: http://localhost:8081/.well-known/jwks.json
 
-# Nơi gọi sang User Service lấy snapshot tài khoản ngân hàng đã xác minh khi tạo
-# PayoutRequest — trỏ qua Eureka bằng application name (xem docs/development-plan.md
-# GĐ4 mục 4, docs/database-schema.md §2, §5).
+# Nơi gọi sang Booking Service xác thực booking trước khi khởi tạo thanh toán
+# (xem docs/api-design.md §5.1) và User Service lấy snapshot tài khoản ngân
+# hàng đã xác minh khi tạo PayoutRequest (GĐ4 mục 4, docs/database-schema.md
+# §2, §5) — trỏ qua Eureka bằng application name.
+booking-service:
+  name: booking-service
+
 user-service:
   name: user-service
 

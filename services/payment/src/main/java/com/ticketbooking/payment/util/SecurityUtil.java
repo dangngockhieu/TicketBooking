@@ -28,4 +28,17 @@ public final class SecurityUtil {
         }
         return Optional.empty();
     }
+
+    /**
+     * Bearer token gốc của request hiện tại — dùng để forward sang Booking
+     * Service khi gọi nội bộ (xem BookingClient), để service đó tự verify lại
+     * quyền sở hữu booking (Zero Trust — không tin payload phía Payment).
+     */
+    public static Optional<String> getCurrentBearerToken() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof Jwt jwt) {
+            return Optional.of("Bearer " + jwt.getTokenValue());
+        }
+        return Optional.empty();
+    }
 }
