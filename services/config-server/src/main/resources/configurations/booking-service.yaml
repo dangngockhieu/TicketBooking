@@ -44,6 +44,23 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
 
+  # Apache Kafka (KRaft, container :9092) — Consumer: payment.success (xác nhận
+  # thanh toán -> PAID/ISSUED -> bắn tiếp tickets.generated). Producer:
+  # tickets.generated cho Catalog/Notification Service (xem
+  # docs/development-plan.md GĐ4 mục 2).
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+    consumer:
+      group-id: booking-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.ticketbooking.common.event
+
   # OAuth2 Resource Server — CHỈ xác thực JWT bằng Public Key lấy từ JWKS của
   # auth-service (Zero Trust). Xem docs/system-design.md §8, §9.
   security:

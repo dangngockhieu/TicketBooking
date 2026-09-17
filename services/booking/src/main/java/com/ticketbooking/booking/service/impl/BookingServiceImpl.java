@@ -9,13 +9,16 @@ import com.ticketbooking.booking.entity.Booking;
 import com.ticketbooking.booking.entity.Ticket;
 import com.ticketbooking.booking.enums.BookingStatus;
 import com.ticketbooking.booking.enums.TicketStatus;
+import com.ticketbooking.booking.event.BookingEventPublisher;
 import com.ticketbooking.booking.repository.BookingRepository;
 import com.ticketbooking.booking.service.BookingService;
 import com.ticketbooking.booking.service.SeatHoldService;
 import com.ticketbooking.common.dto.PageResponse;
+import com.ticketbooking.common.event.TicketsGeneratedEvent;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.common.exception.ForbiddenException;
 import com.ticketbooking.common.exception.ResourceNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @Transactional
 public class BookingServiceImpl implements BookingService {
@@ -38,16 +42,19 @@ public class BookingServiceImpl implements BookingService {
     private final BookingRepository bookingRepository;
     private final CatalogClient catalogClient;
     private final SeatHoldService seatHoldService;
+    private final BookingEventPublisher eventPublisher;
     private final long holdTtlSeconds;
 
     public BookingServiceImpl(
             BookingRepository bookingRepository,
             CatalogClient catalogClient,
             SeatHoldService seatHoldService,
+            BookingEventPublisher eventPublisher,
             @Value("${booking.hold.ttl-seconds:600}") long holdTtlSeconds) {
         this.bookingRepository = bookingRepository;
         this.catalogClient = catalogClient;
         this.seatHoldService = seatHoldService;
+        this.eventPublisher = eventPublisher;
         this.holdTtlSeconds = holdTtlSeconds;
     }
 
@@ -133,6 +140,58 @@ public class BookingServiceImpl implements BookingService {
     @Override
     public void releaseExpiredBooking(UUID bookingId) {
         bookingRepository.findWithTicketsById(bookingId).ifPresent(this::release);
+    }
+
+    @Override
+    public void confirmPayment(UUID bookingId) {
+        Booking booking = bookingRepository.findWithTicketsById(bookingId).orElse(null);
+        if (booking == null) {
+            log.warn("Không tìm thấy booking {} khi xử lý payment.success, bỏ qua.", bookingId);
+            return;
+        }
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            // TODO(GĐ4 Saga): khách đã thanh toán nhưng booking đã bị auto-release do
+            // hết hạn giữ chỗ (race hiếm) — cần bắn booking.refund-requested để Payment
+            // Service tự động hoàn tiền qua MoMo. Chưa triển khai, log để theo dõi thủ công.
+            log.error("Booking {} đã thanh toán thành công nhưng đã bị CANCELLED trước đó — cần hoàn tiền thủ công.",
+                    bookingId);
+            return;
+        }
+
+        int affected = bookingRepository.markPaidIfPending(bookingId);
+        if (affected == 0) {
+            log.info("Booking {} không còn PENDING_PAYMENT (hiện tại: {}), bỏ qua payment.success trùng lặp.",
+                    bookingId, booking.getStatus());
+            return;
+        }
+        booking.setStatus(BookingStatus.PAID);
+
+        Map<UUID, Integer> quantityByTicketClass = new LinkedHashMap<>();
+        for (Ticket ticket : booking.getTickets()) {
+            if (ticket.getStatus() == TicketStatus.LOCKED) {
+                ticket.setStatus(TicketStatus.ISSUED);
+                quantityByTicketClass.merge(ticket.getTicketClassId(), 1, Integer::sum);
+            }
+        }
+        bookingRepository.save(booking);
+
+        quantityByTicketClass.forEach((ticketClassId, quantity) -> {
+            seatHoldService.release(booking.getEventId(), ticketClassId, quantity);
+            seatHoldService.clearHeld(booking.getEventId(), ticketClassId, booking.getCustomerId());
+        });
+
+        List<TicketsGeneratedEvent.TicketClassQuantity> items = quantityByTicketClass.entrySet().stream()
+                .map(entry -> TicketsGeneratedEvent.TicketClassQuantity.builder()
+                        .ticketClassId(entry.getKey())
+                        .quantity(entry.getValue())
+                        .build())
+                .toList();
+        eventPublisher.publishTicketsGenerated(TicketsGeneratedEvent.builder()
+                .eventType("tickets.generated")
+                .bookingId(booking.getId())
+                .catalogEventId(booking.getEventId())
+                .items(items)
+                .build());
     }
 
     private List<ResolvedItem> resolveItems(CatalogEventDto event, List<BookingItemRequest> items) {

@@ -40,4 +40,14 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("UPDATE Booking b SET b.status = com.ticketbooking.booking.enums.BookingStatus.CANCELLED, "
             + "b.updatedAt = CURRENT_TIMESTAMP WHERE b.id = :id AND b.status = com.ticketbooking.booking.enums.BookingStatus.PENDING_PAYMENT")
     int cancelIfPending(@Param("id") UUID id);
+
+    /**
+     * Chuyển sang PAID chỉ khi đang PENDING_PAYMENT — trả về số dòng bị ảnh
+     * hưởng (0 hoặc 1) để chống xử lý trùng khi Kafka redeliver
+     * {@code payment.success} (xem docs/development-plan.md GĐ4 mục 2).
+     */
+    @Modifying
+    @Query("UPDATE Booking b SET b.status = com.ticketbooking.booking.enums.BookingStatus.PAID, "
+            + "b.updatedAt = CURRENT_TIMESTAMP WHERE b.id = :id AND b.status = com.ticketbooking.booking.enums.BookingStatus.PENDING_PAYMENT")
+    int markPaidIfPending(@Param("id") UUID id);
 }

@@ -9,6 +9,7 @@ import com.ticketbooking.booking.entity.Booking;
 import com.ticketbooking.booking.entity.Ticket;
 import com.ticketbooking.booking.enums.BookingStatus;
 import com.ticketbooking.booking.enums.TicketStatus;
+import com.ticketbooking.booking.event.BookingEventPublisher;
 import com.ticketbooking.booking.repository.BookingRepository;
 import com.ticketbooking.booking.service.impl.BookingServiceImpl;
 import com.ticketbooking.common.exception.ConflictException;
@@ -42,6 +43,9 @@ class BookingServiceImplTest {
     @Mock
     private SeatHoldService seatHoldService;
 
+    @Mock
+    private BookingEventPublisher eventPublisher;
+
     private BookingServiceImpl bookingService;
 
     private UUID customerId;
@@ -51,7 +55,7 @@ class BookingServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        bookingService = new BookingServiceImpl(bookingRepository, catalogClient, seatHoldService, 600);
+        bookingService = new BookingServiceImpl(bookingRepository, catalogClient, seatHoldService, eventPublisher, 600);
         customerId = UUID.randomUUID();
         eventId = UUID.randomUUID();
         vipClassId = UUID.randomUUID();
@@ -177,5 +181,66 @@ class BookingServiceImplTest {
         bookingService.releaseExpiredBooking(booking.getId());
 
         verifyNoInteractions(seatHoldService);
+    }
+
+    @Test
+    void confirmPayment_marksPaidAndIssuesTickets_thenPublishesTicketsGenerated() {
+        Booking booking = Booking.builder().id(UUID.randomUUID()).customerId(customerId)
+                .eventId(eventId).status(BookingStatus.PENDING_PAYMENT).build();
+        booking.addTicket(Ticket.builder().ticketClassId(vipClassId).ticketClassName("VIP")
+                .unitPrice(new BigDecimal("1500000")).qrCodeData(UUID.randomUUID().toString())
+                .status(TicketStatus.LOCKED).build());
+        booking.addTicket(Ticket.builder().ticketClassId(vipClassId).ticketClassName("VIP")
+                .unitPrice(new BigDecimal("1500000")).qrCodeData(UUID.randomUUID().toString())
+                .status(TicketStatus.LOCKED).build());
+        when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.markPaidIfPending(booking.getId())).thenReturn(1);
+
+        bookingService.confirmPayment(booking.getId());
+
+        assertEquals(BookingStatus.PAID, booking.getStatus());
+        assertTrue(booking.getTickets().stream().allMatch(t -> t.getStatus() == TicketStatus.ISSUED));
+        verify(seatHoldService).release(eventId, vipClassId, 2);
+        verify(seatHoldService).clearHeld(eventId, vipClassId, customerId);
+        verify(eventPublisher).publishTicketsGenerated(argThat(event ->
+                event.getBookingId().equals(booking.getId())
+                        && event.getCatalogEventId().equals(eventId)
+                        && event.getItems().size() == 1
+                        && event.getItems().getFirst().getQuantity() == 2));
+    }
+
+    @Test
+    void confirmPayment_isNoop_whenBookingNotFound() {
+        UUID bookingId = UUID.randomUUID();
+        when(bookingRepository.findWithTicketsById(bookingId)).thenReturn(Optional.empty());
+
+        bookingService.confirmPayment(bookingId);
+
+        verify(bookingRepository, never()).markPaidIfPending(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void confirmPayment_logsAndSkips_whenBookingAlreadyCancelled() {
+        Booking booking = Booking.builder().id(UUID.randomUUID()).customerId(customerId)
+                .eventId(eventId).status(BookingStatus.CANCELLED).build();
+        when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
+
+        bookingService.confirmPayment(booking.getId());
+
+        verify(bookingRepository, never()).markPaidIfPending(any());
+        verifyNoInteractions(eventPublisher, seatHoldService);
+    }
+
+    @Test
+    void confirmPayment_isNoop_whenAlreadyProcessedByAnotherPath() {
+        Booking booking = Booking.builder().id(UUID.randomUUID()).customerId(customerId)
+                .eventId(eventId).status(BookingStatus.PENDING_PAYMENT).build();
+        when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.markPaidIfPending(booking.getId())).thenReturn(0);
+
+        bookingService.confirmPayment(booking.getId());
+
+        verifyNoInteractions(eventPublisher, seatHoldService);
     }
 }

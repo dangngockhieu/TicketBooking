@@ -27,4 +27,13 @@ public interface BookingService {
      * trạng thái PENDING_PAYMENT (đã được xử lý bởi nhánh khác).
      */
     void releaseExpiredBooking(UUID bookingId);
+
+    /**
+     * Xác nhận thanh toán thành công (Kafka consumer {@code payment.success},
+     * xem docs/development-plan.md GĐ4 mục 2) — chuyển booking sang PAID, vé
+     * sang ISSUED, trả lại Redis seat hold, rồi bắn tiếp {@code tickets.generated}.
+     * No-op nếu booking không còn PENDING_PAYMENT (đã xử lý bởi lần redeliver
+     * trước, hoặc đã bị hủy do hết hạn — xem log cảnh báo trong trường hợp này).
+     */
+    void confirmPayment(UUID bookingId);
 }
