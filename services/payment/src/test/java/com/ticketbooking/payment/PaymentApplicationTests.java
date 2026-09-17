@@ -5,6 +5,7 @@ import com.ticketbooking.payment.repository.PayoutRequestRepository;
 import com.ticketbooking.payment.repository.TransactionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(properties = {
@@ -23,6 +24,9 @@ class PaymentApplicationTests {
 
     @MockitoBean
     private PayoutRequestRepository payoutRequestRepository;
+
+    @MockitoBean
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Test
     void contextLoads() {
