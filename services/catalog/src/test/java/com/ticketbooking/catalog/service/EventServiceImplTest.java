@@ -11,6 +11,7 @@ import com.ticketbooking.catalog.entity.Event;
 import com.ticketbooking.catalog.enums.EventStatus;
 import com.ticketbooking.catalog.repository.CategoryRepository;
 import com.ticketbooking.catalog.repository.EventRepository;
+import com.ticketbooking.catalog.repository.TicketClassRepository;
 import com.ticketbooking.catalog.service.impl.EventServiceImpl;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.common.exception.ForbiddenException;
@@ -48,6 +49,9 @@ class EventServiceImplTest {
     private CategoryRepository categoryRepository;
 
     @Mock
+    private TicketClassRepository ticketClassRepository;
+
+    @Mock
     private StringRedisTemplate redisTemplate;
 
     @Mock
@@ -62,7 +66,7 @@ class EventServiceImplTest {
     @BeforeEach
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        eventService = new EventServiceImpl(eventRepository, categoryRepository, redisTemplate, objectMapper);
+        eventService = new EventServiceImpl(eventRepository, categoryRepository, ticketClassRepository, redisTemplate, objectMapper);
 
         organizerId = UUID.randomUUID();
         eventId = UUID.randomUUID();
@@ -178,5 +182,26 @@ class EventServiceImplTest {
 
         assertEquals(0, result.getTotalElements());
         assertEquals(1, result.getPage());
+    }
+
+    @Test
+    void reduceAvailableQuantity_decrementsAndInvalidatesCache() {
+        UUID ticketClassId = UUID.randomUUID();
+        when(ticketClassRepository.decrementAvailableQuantity(ticketClassId, 2)).thenReturn(1);
+        when(redisTemplate.keys("catalog:event:list:*")).thenReturn(java.util.Set.of());
+
+        eventService.reduceAvailableQuantity(eventId, ticketClassId, 2);
+
+        verify(redisTemplate).delete("catalog:event:" + eventId);
+    }
+
+    @Test
+    void reduceAvailableQuantity_logsError_andSkipsCacheInvalidation_whenInsufficientStock() {
+        UUID ticketClassId = UUID.randomUUID();
+        when(ticketClassRepository.decrementAvailableQuantity(ticketClassId, 999)).thenReturn(0);
+
+        eventService.reduceAvailableQuantity(eventId, ticketClassId, 999);
+
+        verify(redisTemplate, never()).delete(anyString());
     }
 }

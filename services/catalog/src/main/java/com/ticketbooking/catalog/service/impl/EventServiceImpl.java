@@ -13,6 +13,7 @@ import com.ticketbooking.catalog.enums.EventStatus;
 import com.ticketbooking.catalog.repository.CategoryRepository;
 import com.ticketbooking.catalog.repository.EventRepository;
 import com.ticketbooking.catalog.repository.EventSpecifications;
+import com.ticketbooking.catalog.repository.TicketClassRepository;
 import com.ticketbooking.catalog.service.EventService;
 import com.ticketbooking.common.dto.PageResponse;
 import com.ticketbooking.common.exception.ConflictException;
@@ -45,16 +46,19 @@ public class EventServiceImpl implements EventService {
 
     private final EventRepository eventRepository;
     private final CategoryRepository categoryRepository;
+    private final TicketClassRepository ticketClassRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
     public EventServiceImpl(
             EventRepository eventRepository,
             CategoryRepository categoryRepository,
+            TicketClassRepository ticketClassRepository,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper) {
         this.eventRepository = eventRepository;
         this.categoryRepository = categoryRepository;
+        this.ticketClassRepository = ticketClassRepository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
     }
@@ -162,7 +166,7 @@ public class EventServiceImpl implements EventService {
         event.setSaleEndTime(request.saleEndTime());
 
         Event saved = eventRepository.save(event);
-        invalidateCaches(saved);
+        invalidateCaches(saved.getId());
         return EventResponse.from(saved);
     }
 
@@ -178,8 +182,20 @@ public class EventServiceImpl implements EventService {
 
         event.setStatus(EventStatus.PUBLISHED);
         Event saved = eventRepository.save(event);
-        invalidateCaches(saved);
+        invalidateCaches(saved.getId());
         return EventResponse.from(saved);
+    }
+
+    @Override
+    public void reduceAvailableQuantity(UUID eventId, UUID ticketClassId, int quantity) {
+        int affected = ticketClassRepository.decrementAvailableQuantity(ticketClassId, quantity);
+        if (affected == 0) {
+            log.error("Không thể trừ available_quantity: ticketClass={}, quantity={} — "
+                    + "id không tồn tại hoặc tồn kho không đủ (không nên xảy ra vì Redis hold đã chặn overbooking).",
+                    ticketClassId, quantity);
+            return;
+        }
+        invalidateCaches(eventId);
     }
 
     private Category resolveCategory(UUID categoryId) {
@@ -209,8 +225,8 @@ public class EventServiceImpl implements EventService {
      * {@code KEYS} — chấp nhận được ở quy mô hiện tại, nhưng cần đổi sang
      * {@code SCAN} theo cursor khi keyspace lớn để tránh chặn Redis).
      */
-    private void invalidateCaches(Event event) {
-        redisTemplate.delete(DETAIL_CACHE_PREFIX + event.getId());
+    private void invalidateCaches(UUID eventId) {
+        redisTemplate.delete(DETAIL_CACHE_PREFIX + eventId);
         Set<String> listKeys = redisTemplate.keys(LIST_CACHE_PREFIX + "*");
         if (listKeys != null && !listKeys.isEmpty()) {
             redisTemplate.delete(listKeys);

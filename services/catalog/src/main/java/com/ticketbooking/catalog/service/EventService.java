@@ -22,4 +22,11 @@ public interface EventService {
     EventResponse update(UUID organizerId, UUID eventId, UpdateEventRequest request);
 
     EventResponse publish(UUID organizerId, UUID eventId);
+
+    /**
+     * Trừ vĩnh viễn {@code available_quantity} sau khi Booking Service xác
+     * nhận thanh toán thành công (Kafka consumer {@code tickets.generated},
+     * xem docs/development-plan.md GĐ4 mục 2) và invalidate cache liên quan.
+     */
+    void reduceAvailableQuantity(UUID eventId, UUID ticketClassId, int quantity);
 }
