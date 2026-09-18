@@ -3,6 +3,7 @@ package com.ticketbooking.payment.momo;
 import com.ticketbooking.common.exception.BadGatewayException;
 import com.ticketbooking.payment.config.MomoProperties;
 import com.ticketbooking.payment.momo.dto.MomoCreatePaymentResponse;
+import com.ticketbooking.payment.momo.dto.MomoRefundResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -82,5 +83,40 @@ class MomoClientTest {
 
         assertThrows(BadGatewayException.class,
                 () -> momoClient.createPayment(bookingId, new BigDecimal("100000"), "req-3", null));
+    }
+
+    @Test
+    void refund_returnsSuccess_andSignsCorrectFields() {
+        UUID bookingId = UUID.randomUUID();
+        String body = """
+                {"partnerCode":"MOMOPARTNER","requestId":"req-1","amount":3000000,
+                 "resultCode":0,"message":"Successful.","transId":9999999}
+                """;
+
+        server.expect(requestTo("https://test-payment.momo.vn/v2/gateway/api/refund"))
+                .andExpect(method(org.springframework.http.HttpMethod.POST))
+                .andExpect(jsonPath("$.partnerCode").value("MOMOPARTNER"))
+                .andExpect(jsonPath("$.accessKey").value("access-key"))
+                .andExpect(jsonPath("$.amount").value("3000000"))
+                .andExpect(jsonPath("$.transId").value(4123456789L))
+                .andExpect(jsonPath("$.description").value("Hoàn tiền do lỗi hệ thống"))
+                .andExpect(jsonPath("$.signature").exists())
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        MomoRefundResponse response = momoClient.refund(
+                bookingId, new BigDecimal("3000000"), 4123456789L, "Hoàn tiền do lỗi hệ thống");
+
+        assertEquals(true, response.isSuccess());
+        server.verify();
+    }
+
+    @Test
+    void refund_throwsBadGateway_onServerError() {
+        UUID bookingId = UUID.randomUUID();
+        server.expect(requestTo("https://test-payment.momo.vn/v2/gateway/api/refund"))
+                .andRespond(withServerError());
+
+        assertThrows(BadGatewayException.class,
+                () -> momoClient.refund(bookingId, new BigDecimal("100000"), 123L, "test"));
     }
 }

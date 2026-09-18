@@ -2,7 +2,9 @@ package com.ticketbooking.payment.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ticketbooking.common.event.BookingRefundRequestedEvent;
 import com.ticketbooking.common.event.PaymentFailedEvent;
+import com.ticketbooking.common.event.PaymentRefundedEvent;
 import com.ticketbooking.common.event.PaymentSuccessEvent;
 import com.ticketbooking.common.exception.BadGatewayException;
 import com.ticketbooking.common.exception.BadRequestException;
@@ -19,6 +21,7 @@ import com.ticketbooking.payment.momo.MomoClient;
 import com.ticketbooking.payment.momo.MomoSignatureService;
 import com.ticketbooking.payment.momo.dto.MomoCreatePaymentResponse;
 import com.ticketbooking.payment.momo.dto.MomoIpnRequest;
+import com.ticketbooking.payment.momo.dto.MomoRefundResponse;
 import com.ticketbooking.payment.repository.TransactionRepository;
 import com.ticketbooking.payment.service.PaymentService;
 import lombok.extern.slf4j.Slf4j;
@@ -170,6 +173,56 @@ public class PaymentServiceImpl implements PaymentService {
                     .reason(request.message())
                     .build());
         }
+    }
+
+    @Override
+    public void processRefund(BookingRefundRequestedEvent event) {
+        Transaction transaction = transactionRepository.findById(event.getTransactionId()).orElse(null);
+        if (transaction == null) {
+            log.error("Không tìm thấy giao dịch {} khi xử lý booking.refund-requested cho booking {}, bỏ qua.",
+                    event.getTransactionId(), event.getBookingId());
+            return;
+        }
+        if (transaction.getStatus() == TransactionStatus.REFUNDED) {
+            log.info("Giao dịch {} đã REFUNDED trước đó, bỏ qua yêu cầu hoàn tiền trùng lặp.", transaction.getId());
+            return;
+        }
+        if (transaction.getStatus() != TransactionStatus.SUCCESS) {
+            log.error("Giao dịch {} không ở trạng thái SUCCESS (hiện tại: {}), không thể hoàn tiền.",
+                    transaction.getId(), transaction.getStatus());
+            return;
+        }
+
+        long transId;
+        try {
+            transId = Long.parseLong(transaction.getGatewayTransId());
+        } catch (NumberFormatException | NullPointerException e) {
+            log.error("gatewayTransId '{}' của giao dịch {} không hợp lệ, không thể hoàn tiền.",
+                    transaction.getGatewayTransId(), transaction.getId());
+            return;
+        }
+
+        String description = "Hoàn tiền đơn hàng " + event.getBookingId()
+                + (event.getReason() != null ? ": " + event.getReason() : "");
+
+        MomoRefundResponse response = momoClient.refund(transaction.getBookingId(), transaction.getAmount(), transId, description);
+        if (!response.isSuccess()) {
+            log.error("MoMo từ chối hoàn tiền giao dịch {} (transId={}): resultCode={}, message={} — cần xử lý thủ công.",
+                    transaction.getId(), transId, response.resultCode(), response.message());
+            return;
+        }
+
+        transaction.setStatus(TransactionStatus.REFUNDED);
+        transactionRepository.save(transaction);
+
+        eventPublisher.publishRefunded(PaymentRefundedEvent.builder()
+                .eventType("payment.refunded")
+                .transactionId(transaction.getId())
+                .bookingId(transaction.getBookingId())
+                .amount(transaction.getAmount())
+                .gatewayTransId(transaction.getGatewayTransId())
+                .refundedAt(Instant.now())
+                .build());
     }
 
     private String buildIpnRawSignature(MomoIpnRequest request) {

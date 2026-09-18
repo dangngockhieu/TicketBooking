@@ -721,6 +721,7 @@ Payment Service consume
 POST https://payment.momo.vn/v2/gateway/api/refund
 {
   "partnerCode": "MOMO",
+  "accessKey":   "...",
   "orderId":     "<bookingId>-refund-<timestamp>",
   "requestId":   "<uuid>",
   "amount":      3000000,
@@ -735,6 +736,11 @@ resultCode = 0 → Transaction.status = REFUNDED
 Publish Kafka event: payment.refunded
         ↓
 Booking Service: booking = REFUNDED, giải phóng vé
+```
+
+`signature` ký trên chuỗi raw (cùng chuẩn `accessKey` như §5.1/§5.2):
+```
+rawSignature = "accessKey=...&amount=3000000&description=...&orderId=...&partnerCode=MOMO&requestId=...&transId=4123456789"
 ```
 
 ---

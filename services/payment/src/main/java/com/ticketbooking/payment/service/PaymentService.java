@@ -1,5 +1,6 @@
 package com.ticketbooking.payment.service;
 
+import com.ticketbooking.common.event.BookingRefundRequestedEvent;
 import com.ticketbooking.payment.dto.request.InitiatePaymentRequest;
 import com.ticketbooking.payment.dto.response.PaymentInitiateResponse;
 import com.ticketbooking.payment.momo.dto.MomoIpnRequest;
@@ -23,4 +24,12 @@ public interface PaymentService {
      * signature không khớp hoặc amount không khớp (chặn giả mạo).
      */
     void handleMomoIpn(MomoIpnRequest request);
+
+    /**
+     * Xử lý Saga Compensation (Kafka consumer {@code booking.refund-requested},
+     * xem docs/api-design.md §5.4) — gọi MoMo Refund API cho giao dịch đã
+     * SUCCESS, cập nhật Transaction sang REFUNDED và publish {@code payment.refunded}.
+     * No-op nếu giao dịch không tồn tại hoặc đã REFUNDED (idempotent).
+     */
+    void processRefund(BookingRefundRequestedEvent event);
 }

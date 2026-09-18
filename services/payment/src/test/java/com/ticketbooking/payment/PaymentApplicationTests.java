@@ -5,13 +5,13 @@ import com.ticketbooking.payment.repository.PayoutRequestRepository;
 import com.ticketbooking.payment.repository.TransactionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(properties = {
         "spring.cloud.config.enabled=false",
         "eureka.client.enabled=false",
-        "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.orm.jpa.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration,org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration",
+        "spring.autoconfigure.exclude=org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration,org.springframework.boot.orm.jpa.autoconfigure.HibernateJpaAutoConfiguration,org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration",
+        "spring.kafka.consumer.group-id=payment-service",
         "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=http://localhost:8081/.well-known/jwks.json"
 })
 class PaymentApplicationTests {
@@ -24,9 +24,6 @@ class PaymentApplicationTests {
 
     @MockitoBean
     private PayoutRequestRepository payoutRequestRepository;
-
-    @MockitoBean
-    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @Test
     void contextLoads() {

@@ -11,13 +11,16 @@ import com.ticketbooking.payment.dto.response.PaymentInitiateResponse;
 import com.ticketbooking.payment.entity.Transaction;
 import com.ticketbooking.payment.enums.TransactionStatus;
 import com.ticketbooking.payment.event.PaymentEventPublisher;
+import com.ticketbooking.common.event.BookingRefundRequestedEvent;
 import com.ticketbooking.common.event.PaymentFailedEvent;
+import com.ticketbooking.common.event.PaymentRefundedEvent;
 import com.ticketbooking.common.event.PaymentSuccessEvent;
 import com.ticketbooking.common.exception.BadRequestException;
 import com.ticketbooking.payment.momo.MomoClient;
 import com.ticketbooking.payment.momo.MomoSignatureService;
 import com.ticketbooking.payment.momo.dto.MomoCreatePaymentResponse;
 import com.ticketbooking.payment.momo.dto.MomoIpnRequest;
+import com.ticketbooking.payment.momo.dto.MomoRefundResponse;
 import com.ticketbooking.payment.repository.TransactionRepository;
 import com.ticketbooking.payment.service.impl.PaymentServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -282,5 +285,89 @@ class PaymentServiceImplTest {
         paymentService.handleMomoIpn(request);
 
         verifyNoInteractions(eventPublisher);
+    }
+
+    private BookingRefundRequestedEvent refundRequestedEvent(UUID transactionId) {
+        return BookingRefundRequestedEvent.builder()
+                .eventType("booking.refund-requested")
+                .bookingId(bookingId)
+                .transactionId(transactionId)
+                .amount(new BigDecimal("3000000"))
+                .gatewayTransId("4123456789")
+                .reason("Booking đã bị hủy do hết hạn giữ chỗ")
+                .build();
+    }
+
+    @Test
+    void processRefund_succeeds_marksRefundedAndPublishesEvent() {
+        UUID transactionId = UUID.randomUUID();
+        Transaction transaction = Transaction.builder()
+                .id(transactionId).bookingId(bookingId).amount(new BigDecimal("3000000"))
+                .paymentMethod("MOMO").status(TransactionStatus.SUCCESS).gatewayTransId("4123456789").build();
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
+        MomoRefundResponse response = new MomoRefundResponse(
+                "MOMOPARTNER", "orderId", "reqId", 3000000L, 0, "Successful.", 4123456789L);
+        when(momoClient.refund(eq(bookingId), eq(new BigDecimal("3000000")), eq(4123456789L), anyString()))
+                .thenReturn(response);
+
+        paymentService.processRefund(refundRequestedEvent(transactionId));
+
+        assertEquals(TransactionStatus.REFUNDED, transaction.getStatus());
+        verify(eventPublisher).publishRefunded(any(PaymentRefundedEvent.class));
+    }
+
+    @Test
+    void processRefund_isNoop_whenTransactionNotFound() {
+        UUID transactionId = UUID.randomUUID();
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.empty());
+
+        paymentService.processRefund(refundRequestedEvent(transactionId));
+
+        verifyNoInteractions(momoClient, eventPublisher);
+    }
+
+    @Test
+    void processRefund_isIdempotent_whenAlreadyRefunded() {
+        UUID transactionId = UUID.randomUUID();
+        Transaction transaction = Transaction.builder()
+                .id(transactionId).bookingId(bookingId).amount(new BigDecimal("3000000"))
+                .paymentMethod("MOMO").status(TransactionStatus.REFUNDED).gatewayTransId("4123456789").build();
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
+
+        paymentService.processRefund(refundRequestedEvent(transactionId));
+
+        verifyNoInteractions(momoClient, eventPublisher);
+    }
+
+    @Test
+    void processRefund_skips_whenTransactionNotSuccess() {
+        UUID transactionId = UUID.randomUUID();
+        Transaction transaction = Transaction.builder()
+                .id(transactionId).bookingId(bookingId).amount(new BigDecimal("3000000"))
+                .paymentMethod("MOMO").status(TransactionStatus.PENDING).build();
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
+
+        paymentService.processRefund(refundRequestedEvent(transactionId));
+
+        verifyNoInteractions(momoClient, eventPublisher);
+    }
+
+    @Test
+    void processRefund_doesNotMarkRefunded_whenMomoRejects() {
+        UUID transactionId = UUID.randomUUID();
+        Transaction transaction = Transaction.builder()
+                .id(transactionId).bookingId(bookingId).amount(new BigDecimal("3000000"))
+                .paymentMethod("MOMO").status(TransactionStatus.SUCCESS).gatewayTransId("4123456789").build();
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
+        MomoRefundResponse rejected = new MomoRefundResponse(
+                "MOMOPARTNER", "orderId", "reqId", 3000000L, 99, "Refund rejected.", null);
+        when(momoClient.refund(eq(bookingId), eq(new BigDecimal("3000000")), eq(4123456789L), anyString()))
+                .thenReturn(rejected);
+
+        paymentService.processRefund(refundRequestedEvent(transactionId));
+
+        assertEquals(TransactionStatus.SUCCESS, transaction.getStatus());
+        verifyNoInteractions(eventPublisher);
+        verify(transactionRepository, never()).save(any());
     }
 }
