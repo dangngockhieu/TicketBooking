@@ -14,6 +14,7 @@ import com.ticketbooking.booking.repository.BookingRepository;
 import com.ticketbooking.booking.service.BookingService;
 import com.ticketbooking.booking.service.SeatHoldService;
 import com.ticketbooking.common.dto.PageResponse;
+import com.ticketbooking.common.event.BookingRefundRequestedEvent;
 import com.ticketbooking.common.event.TicketsGeneratedEvent;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.common.exception.ForbiddenException;
@@ -143,18 +144,22 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
-    public void confirmPayment(UUID bookingId) {
+    public void confirmPayment(UUID bookingId, UUID transactionId, BigDecimal amount, String gatewayTransId) {
         Booking booking = bookingRepository.findWithTicketsById(bookingId).orElse(null);
         if (booking == null) {
-            log.warn("Không tìm thấy booking {} khi xử lý payment.success, bỏ qua.", bookingId);
+            log.error("Không tìm thấy booking {} dù đã thanh toán thành công — yêu cầu hoàn tiền.", bookingId);
+            requestRefund(bookingId, transactionId, amount, gatewayTransId,
+                    "Không tìm thấy booking " + bookingId);
             return;
         }
         if (booking.getStatus() == BookingStatus.CANCELLED) {
-            // TODO(GĐ4 Saga): khách đã thanh toán nhưng booking đã bị auto-release do
-            // hết hạn giữ chỗ (race hiếm) — cần bắn booking.refund-requested để Payment
-            // Service tự động hoàn tiền qua MoMo. Chưa triển khai, log để theo dõi thủ công.
-            log.error("Booking {} đã thanh toán thành công nhưng đã bị CANCELLED trước đó — cần hoàn tiền thủ công.",
+            // Saga Compensation (xem docs/api-design.md §5.4): khách đã thanh toán
+            // nhưng booking đã bị auto-release do hết hạn giữ chỗ (race hiếm) — yêu
+            // cầu Payment Service hoàn tiền qua MoMo thay vì chỉ log cảnh báo.
+            log.error("Booking {} đã thanh toán thành công nhưng đã bị hủy do hết hạn giữ chỗ trước đó — yêu cầu hoàn tiền.",
                     bookingId);
+            requestRefund(bookingId, transactionId, amount, gatewayTransId,
+                    "Booking đã bị hủy do hết hạn giữ chỗ trước khi thanh toán được xác nhận");
             return;
         }
 
@@ -166,19 +171,9 @@ public class BookingServiceImpl implements BookingService {
         }
         booking.setStatus(BookingStatus.PAID);
 
-        Map<UUID, Integer> quantityByTicketClass = new LinkedHashMap<>();
-        for (Ticket ticket : booking.getTickets()) {
-            if (ticket.getStatus() == TicketStatus.LOCKED) {
-                ticket.setStatus(TicketStatus.ISSUED);
-                quantityByTicketClass.merge(ticket.getTicketClassId(), 1, Integer::sum);
-            }
-        }
+        Map<UUID, Integer> quantityByTicketClass = transitionLockedTickets(booking, TicketStatus.ISSUED);
         bookingRepository.save(booking);
-
-        quantityByTicketClass.forEach((ticketClassId, quantity) -> {
-            seatHoldService.release(booking.getEventId(), ticketClassId, quantity);
-            seatHoldService.clearHeld(booking.getEventId(), ticketClassId, booking.getCustomerId());
-        });
+        releaseSeatHold(booking, quantityByTicketClass);
 
         List<TicketsGeneratedEvent.TicketClassQuantity> items = quantityByTicketClass.entrySet().stream()
                 .map(entry -> TicketsGeneratedEvent.TicketClassQuantity.builder()
@@ -191,6 +186,17 @@ public class BookingServiceImpl implements BookingService {
                 .bookingId(booking.getId())
                 .catalogEventId(booking.getEventId())
                 .items(items)
+                .build());
+    }
+
+    private void requestRefund(UUID bookingId, UUID transactionId, BigDecimal amount, String gatewayTransId, String reason) {
+        eventPublisher.publishRefundRequested(BookingRefundRequestedEvent.builder()
+                .eventType("booking.refund-requested")
+                .bookingId(bookingId)
+                .transactionId(transactionId)
+                .amount(amount)
+                .gatewayTransId(gatewayTransId)
+                .reason(reason)
                 .build());
     }
 
@@ -252,15 +258,24 @@ public class BookingServiceImpl implements BookingService {
         }
         booking.setStatus(BookingStatus.CANCELLED);
 
+        Map<UUID, Integer> quantityByTicketClass = transitionLockedTickets(booking, TicketStatus.CANCELLED);
+        bookingRepository.save(booking);
+        releaseSeatHold(booking, quantityByTicketClass);
+    }
+
+    /** Chuyển các vé đang LOCKED sang {@code newStatus}, trả về số lượng đã chuyển theo từng hạng vé. */
+    private Map<UUID, Integer> transitionLockedTickets(Booking booking, TicketStatus newStatus) {
         Map<UUID, Integer> quantityByTicketClass = new LinkedHashMap<>();
         for (Ticket ticket : booking.getTickets()) {
             if (ticket.getStatus() == TicketStatus.LOCKED) {
-                ticket.setStatus(TicketStatus.CANCELLED);
+                ticket.setStatus(newStatus);
                 quantityByTicketClass.merge(ticket.getTicketClassId(), 1, Integer::sum);
             }
         }
-        bookingRepository.save(booking);
+        return quantityByTicketClass;
+    }
 
+    private void releaseSeatHold(Booking booking, Map<UUID, Integer> quantityByTicketClass) {
         quantityByTicketClass.forEach((ticketClassId, quantity) -> {
             seatHoldService.release(booking.getEventId(), ticketClassId, quantity);
             seatHoldService.clearHeld(booking.getEventId(), ticketClassId, booking.getCustomerId());

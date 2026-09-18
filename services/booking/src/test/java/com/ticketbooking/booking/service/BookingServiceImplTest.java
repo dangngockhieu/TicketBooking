@@ -12,6 +12,7 @@ import com.ticketbooking.booking.enums.TicketStatus;
 import com.ticketbooking.booking.event.BookingEventPublisher;
 import com.ticketbooking.booking.repository.BookingRepository;
 import com.ticketbooking.booking.service.impl.BookingServiceImpl;
+import com.ticketbooking.common.event.BookingRefundRequestedEvent;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.common.exception.ForbiddenException;
 import com.ticketbooking.common.exception.ResourceNotFoundException;
@@ -196,7 +197,8 @@ class BookingServiceImplTest {
         when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.markPaidIfPending(booking.getId())).thenReturn(1);
 
-        bookingService.confirmPayment(booking.getId());
+        UUID transactionId = UUID.randomUUID();
+        bookingService.confirmPayment(booking.getId(), transactionId, new BigDecimal("3000000"), "4123456789");
 
         assertEquals(BookingStatus.PAID, booking.getStatus());
         assertTrue(booking.getTickets().stream().allMatch(t -> t.getStatus() == TicketStatus.ISSUED));
@@ -210,26 +212,33 @@ class BookingServiceImplTest {
     }
 
     @Test
-    void confirmPayment_isNoop_whenBookingNotFound() {
+    void confirmPayment_requestsRefund_whenBookingNotFound() {
         UUID bookingId = UUID.randomUUID();
+        UUID transactionId = UUID.randomUUID();
         when(bookingRepository.findWithTicketsById(bookingId)).thenReturn(Optional.empty());
 
-        bookingService.confirmPayment(bookingId);
+        bookingService.confirmPayment(bookingId, transactionId, new BigDecimal("3000000"), "4123456789");
 
         verify(bookingRepository, never()).markPaidIfPending(any());
-        verifyNoInteractions(eventPublisher);
+        verify(eventPublisher).publishRefundRequested(argThat(event ->
+                event.getBookingId().equals(bookingId)
+                        && event.getTransactionId().equals(transactionId)
+                        && event.getGatewayTransId().equals("4123456789")));
+        verifyNoInteractions(seatHoldService);
     }
 
     @Test
-    void confirmPayment_logsAndSkips_whenBookingAlreadyCancelled() {
+    void confirmPayment_requestsRefund_whenBookingAlreadyCancelled() {
         Booking booking = Booking.builder().id(UUID.randomUUID()).customerId(customerId)
                 .eventId(eventId).status(BookingStatus.CANCELLED).build();
+        UUID transactionId = UUID.randomUUID();
         when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
 
-        bookingService.confirmPayment(booking.getId());
+        bookingService.confirmPayment(booking.getId(), transactionId, new BigDecimal("3000000"), "4123456789");
 
         verify(bookingRepository, never()).markPaidIfPending(any());
-        verifyNoInteractions(eventPublisher, seatHoldService);
+        verify(eventPublisher).publishRefundRequested(any(BookingRefundRequestedEvent.class));
+        verifyNoInteractions(seatHoldService);
     }
 
     @Test
@@ -239,7 +248,7 @@ class BookingServiceImplTest {
         when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.markPaidIfPending(booking.getId())).thenReturn(0);
 
-        bookingService.confirmPayment(booking.getId());
+        bookingService.confirmPayment(booking.getId(), UUID.randomUUID(), new BigDecimal("3000000"), "4123456789");
 
         verifyNoInteractions(eventPublisher, seatHoldService);
     }

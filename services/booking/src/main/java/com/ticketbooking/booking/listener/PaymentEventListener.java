@@ -25,6 +25,7 @@ public class PaymentEventListener {
     public void onPaymentSuccess(PaymentSuccessEvent event) {
         log.info("Nhận payment.success cho booking {} (transactionId={})",
                 event.getBookingId(), event.getTransactionId());
-        bookingService.confirmPayment(event.getBookingId());
+        bookingService.confirmPayment(event.getBookingId(), event.getTransactionId(),
+                event.getAmount(), event.getGatewayTransId());
     }
 }

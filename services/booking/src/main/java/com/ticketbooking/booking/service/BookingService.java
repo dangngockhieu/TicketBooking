@@ -6,6 +6,7 @@ import com.ticketbooking.booking.enums.BookingStatus;
 import com.ticketbooking.common.dto.PageResponse;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public interface BookingService {
@@ -32,8 +33,17 @@ public interface BookingService {
      * Xác nhận thanh toán thành công (Kafka consumer {@code payment.success},
      * xem docs/development-plan.md GĐ4 mục 2) — chuyển booking sang PAID, vé
      * sang ISSUED, trả lại Redis seat hold, rồi bắn tiếp {@code tickets.generated}.
-     * No-op nếu booking không còn PENDING_PAYMENT (đã xử lý bởi lần redeliver
-     * trước, hoặc đã bị hủy do hết hạn — xem log cảnh báo trong trường hợp này).
+     * <p>
+     * Nếu không thể hoàn tất (booking không tồn tại, đã bị auto-release do hết
+     * hạn giữ chỗ, hoặc lỗi hệ thống giữa chừng) — bắn
+     * {@code booking.refund-requested} (Saga Compensation, xem
+     * docs/api-design.md §5.4) để Payment Service tự động hoàn tiền qua MoMo.
+     * No-op (không refund) nếu booking đã được xử lý bởi lần redeliver trước
+     * (đã PAID/REFUNDED).
+     *
+     * @param transactionId  giao dịch MoMo tương ứng — cần để build refund request nếu phải compensate
+     * @param amount         số tiền đã thanh toán — cần để build refund request
+     * @param gatewayTransId transId gốc bên MoMo — cần để build refund request
      */
-    void confirmPayment(UUID bookingId);
+    void confirmPayment(UUID bookingId, UUID transactionId, BigDecimal amount, String gatewayTransId);
 }
