@@ -252,4 +252,58 @@ class BookingServiceImplTest {
 
         verifyNoInteractions(eventPublisher, seatHoldService);
     }
+
+    @Test
+    void markRefunded_isNoop_whenBookingNotFound() {
+        UUID bookingId = UUID.randomUUID();
+        when(bookingRepository.findWithTicketsById(bookingId)).thenReturn(Optional.empty());
+
+        bookingService.markRefunded(bookingId);
+
+        verify(bookingRepository, never()).markRefundedIfNotAlready(any());
+        verifyNoInteractions(seatHoldService);
+    }
+
+    @Test
+    void markRefunded_isIdempotent_whenAlreadyRefunded() {
+        Booking booking = Booking.builder().id(UUID.randomUUID()).customerId(customerId)
+                .eventId(eventId).status(BookingStatus.REFUNDED).build();
+        when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.markRefundedIfNotAlready(booking.getId())).thenReturn(0);
+
+        bookingService.markRefunded(booking.getId());
+
+        verifyNoInteractions(seatHoldService);
+    }
+
+    @Test
+    void markRefunded_flipsCancelledBookingToRefunded_withoutReReleasingSeatHold() {
+        Booking booking = Booking.builder().id(UUID.randomUUID()).customerId(customerId)
+                .eventId(eventId).status(BookingStatus.CANCELLED).build();
+        when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.markRefundedIfNotAlready(booking.getId())).thenReturn(1);
+
+        bookingService.markRefunded(booking.getId());
+
+        assertEquals(BookingStatus.REFUNDED, booking.getStatus());
+        verifyNoInteractions(seatHoldService);
+    }
+
+    @Test
+    void markRefunded_releasesSeatHold_whenStillPendingPayment() {
+        Booking booking = Booking.builder().id(UUID.randomUUID()).customerId(customerId)
+                .eventId(eventId).status(BookingStatus.PENDING_PAYMENT).build();
+        booking.addTicket(Ticket.builder().ticketClassId(vipClassId).ticketClassName("VIP")
+                .unitPrice(new BigDecimal("1500000")).qrCodeData(UUID.randomUUID().toString())
+                .status(TicketStatus.LOCKED).build());
+        when(bookingRepository.findWithTicketsById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.markRefundedIfNotAlready(booking.getId())).thenReturn(1);
+
+        bookingService.markRefunded(booking.getId());
+
+        assertEquals(BookingStatus.REFUNDED, booking.getStatus());
+        assertTrue(booking.getTickets().stream().allMatch(t -> t.getStatus() == TicketStatus.CANCELLED));
+        verify(seatHoldService).release(eventId, vipClassId, 1);
+        verify(seatHoldService).clearHeld(eventId, vipClassId, customerId);
+    }
 }

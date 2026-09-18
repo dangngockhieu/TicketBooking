@@ -189,6 +189,31 @@ public class BookingServiceImpl implements BookingService {
                 .build());
     }
 
+    @Override
+    public void markRefunded(UUID bookingId) {
+        Booking booking = bookingRepository.findWithTicketsById(bookingId).orElse(null);
+        if (booking == null) {
+            log.warn("Không tìm thấy booking {} khi xử lý payment.refunded, bỏ qua.", bookingId);
+            return;
+        }
+
+        BookingStatus previousStatus = booking.getStatus();
+        int affected = bookingRepository.markRefundedIfNotAlready(bookingId);
+        if (affected == 0) {
+            log.info("Booking {} đã REFUNDED trước đó, bỏ qua payment.refunded trùng lặp.", bookingId);
+            return;
+        }
+        booking.setStatus(BookingStatus.REFUNDED);
+
+        if (previousStatus == BookingStatus.PENDING_PAYMENT) {
+            // confirmPayment chưa từng kịp nhả ghế (lỗi hệ thống giữa chừng trước khi
+            // release() được gọi) — release nốt vé/Redis seat hold tại đây.
+            Map<UUID, Integer> quantityByTicketClass = transitionLockedTickets(booking, TicketStatus.CANCELLED);
+            releaseSeatHold(booking, quantityByTicketClass);
+        }
+        bookingRepository.save(booking);
+    }
+
     private void requestRefund(UUID bookingId, UUID transactionId, BigDecimal amount, String gatewayTransId, String reason) {
         eventPublisher.publishRefundRequested(BookingRefundRequestedEvent.builder()
                 .eventType("booking.refund-requested")

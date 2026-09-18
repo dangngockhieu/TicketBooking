@@ -46,4 +46,13 @@ public interface BookingService {
      * @param gatewayTransId transId gốc bên MoMo — cần để build refund request
      */
     void confirmPayment(UUID bookingId, UUID transactionId, BigDecimal amount, String gatewayTransId);
+
+    /**
+     * Hoàn tất Saga Compensation (Kafka consumer {@code payment.refunded}, xem
+     * docs/api-design.md §5.4) — chuyển booking sang REFUNDED. Nếu booking vẫn
+     * còn PENDING_PAYMENT (nghĩa là {@link #confirmPayment} chưa từng kịp nhả
+     * ghế trước khi lỗi xảy ra), release nốt vé/Redis seat hold ở đây. No-op
+     * nếu booking không tồn tại hoặc đã REFUNDED (idempotent).
+     */
+    void markRefunded(UUID bookingId);
 }
