@@ -11,8 +11,10 @@ import com.ticketbooking.catalog.entity.Event;
 import com.ticketbooking.catalog.enums.EventStatus;
 import com.ticketbooking.catalog.repository.CategoryRepository;
 import com.ticketbooking.catalog.repository.EventRepository;
+import com.ticketbooking.catalog.repository.ProcessedTicketEventRepository;
 import com.ticketbooking.catalog.repository.TicketClassRepository;
 import com.ticketbooking.catalog.service.impl.EventServiceImpl;
+import com.ticketbooking.common.event.TicketsGeneratedEvent;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.common.exception.ForbiddenException;
 import com.ticketbooking.common.exception.ResourceNotFoundException;
@@ -35,6 +37,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -52,6 +55,9 @@ class EventServiceImplTest {
     private TicketClassRepository ticketClassRepository;
 
     @Mock
+    private ProcessedTicketEventRepository processedTicketEventRepository;
+
+    @Mock
     private StringRedisTemplate redisTemplate;
 
     @Mock
@@ -66,7 +72,8 @@ class EventServiceImplTest {
     @BeforeEach
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        eventService = new EventServiceImpl(eventRepository, categoryRepository, ticketClassRepository, redisTemplate, objectMapper);
+        eventService = new EventServiceImpl(eventRepository, categoryRepository, ticketClassRepository,
+                processedTicketEventRepository, redisTemplate, objectMapper);
 
         organizerId = UUID.randomUUID();
         eventId = UUID.randomUUID();
@@ -203,5 +210,50 @@ class EventServiceImplTest {
         eventService.reduceAvailableQuantity(eventId, ticketClassId, 999);
 
         verify(redisTemplate, never()).delete(anyString());
+    }
+
+    @Test
+    void processTicketsGenerated_firstDelivery_marksProcessedAndReducesEachItem() {
+        UUID bookingId = UUID.randomUUID();
+        UUID vipClassId = UUID.randomUUID();
+        UUID gaClassId = UUID.randomUUID();
+        TicketsGeneratedEvent event = TicketsGeneratedEvent.builder()
+                .eventType("tickets.generated")
+                .bookingId(bookingId)
+                .catalogEventId(eventId)
+                .items(List.of(
+                        TicketsGeneratedEvent.TicketClassQuantity.builder().ticketClassId(vipClassId).quantity(2).build(),
+                        TicketsGeneratedEvent.TicketClassQuantity.builder().ticketClassId(gaClassId).quantity(5).build()))
+                .build();
+
+        when(processedTicketEventRepository.existsById(bookingId)).thenReturn(false);
+        when(ticketClassRepository.decrementAvailableQuantity(vipClassId, 2)).thenReturn(1);
+        when(ticketClassRepository.decrementAvailableQuantity(gaClassId, 5)).thenReturn(1);
+        when(redisTemplate.keys(anyString())).thenReturn(java.util.Set.of());
+
+        eventService.processTicketsGenerated(event);
+
+        verify(processedTicketEventRepository).save(argThat(marker -> marker.getBookingId().equals(bookingId)));
+        verify(ticketClassRepository).decrementAvailableQuantity(vipClassId, 2);
+        verify(ticketClassRepository).decrementAvailableQuantity(gaClassId, 5);
+    }
+
+    @Test
+    void processTicketsGenerated_redelivery_skipsReductionEntirely() {
+        UUID bookingId = UUID.randomUUID();
+        TicketsGeneratedEvent event = TicketsGeneratedEvent.builder()
+                .eventType("tickets.generated")
+                .bookingId(bookingId)
+                .catalogEventId(eventId)
+                .items(List.of(TicketsGeneratedEvent.TicketClassQuantity.builder()
+                        .ticketClassId(UUID.randomUUID()).quantity(2).build()))
+                .build();
+
+        when(processedTicketEventRepository.existsById(bookingId)).thenReturn(true);
+
+        eventService.processTicketsGenerated(event);
+
+        verify(processedTicketEventRepository, never()).save(any());
+        verify(ticketClassRepository, never()).decrementAvailableQuantity(any(), anyInt());
     }
 }

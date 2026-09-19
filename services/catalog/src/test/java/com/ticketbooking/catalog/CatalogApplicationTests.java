@@ -2,6 +2,7 @@ package com.ticketbooking.catalog;
 
 import com.ticketbooking.catalog.repository.CategoryRepository;
 import com.ticketbooking.catalog.repository.EventRepository;
+import com.ticketbooking.catalog.repository.ProcessedTicketEventRepository;
 import com.ticketbooking.catalog.repository.TicketClassRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +26,9 @@ class CatalogApplicationTests {
 
     @MockitoBean
     private TicketClassRepository ticketClassRepository;
+
+    @MockitoBean
+    private ProcessedTicketEventRepository processedTicketEventRepository;
 
     @MockitoBean
     private StringRedisTemplate stringRedisTemplate;

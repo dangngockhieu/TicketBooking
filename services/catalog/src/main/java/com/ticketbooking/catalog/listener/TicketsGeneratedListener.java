@@ -24,8 +24,6 @@ public class TicketsGeneratedListener {
     @KafkaListener(topics = "tickets.generated")
     public void onTicketsGenerated(TicketsGeneratedEvent event) {
         log.info("Nhận tickets.generated cho booking {} (event={})", event.getBookingId(), event.getCatalogEventId());
-        for (TicketsGeneratedEvent.TicketClassQuantity item : event.getItems()) {
-            eventService.reduceAvailableQuantity(event.getCatalogEventId(), item.getTicketClassId(), item.getQuantity());
-        }
+        eventService.processTicketsGenerated(event);
     }
 }

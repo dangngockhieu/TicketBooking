@@ -1,10 +1,12 @@
 package com.ticketbooking.catalog.service;
 
 import com.ticketbooking.catalog.dto.request.CreateEventRequest;
+import com.ticketbooking.catalog.dto.request.EventFeeUpdateRequest;
 import com.ticketbooking.catalog.dto.request.EventSearchFilter;
 import com.ticketbooking.catalog.dto.request.UpdateEventRequest;
 import com.ticketbooking.catalog.dto.response.EventResponse;
 import com.ticketbooking.common.dto.PageResponse;
+import com.ticketbooking.common.event.TicketsGeneratedEvent;
 import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
@@ -24,11 +26,25 @@ public interface EventService {
     EventResponse publish(UUID organizerId, UUID eventId);
 
     /**
+     * Admin sửa {@code commissionRate}/{@code flatFeePerTicket} riêng cho một
+     * sự kiện (xem docs/development-plan.md GĐ4 mục 4).
+     */
+    EventResponse updateFees(UUID eventId, EventFeeUpdateRequest request);
+
+    /**
      * Trừ vĩnh viễn {@code available_quantity} sau khi Booking Service xác
      * nhận thanh toán thành công (Kafka consumer {@code tickets.generated},
      * xem docs/development-plan.md GĐ4 mục 2) và invalidate cache liên quan.
      */
     void reduceAvailableQuantity(UUID eventId, UUID ticketClassId, int quantity);
+
+    /**
+     * Xử lý toàn bộ {@code tickets.generated} cho một booking — idempotent:
+     * nếu {@code bookingId} đã được xử lý trước đó (Kafka redeliver message),
+     * bỏ qua toàn bộ để tránh trừ kho 2 lần (xem docs/development-plan.md GĐ4
+     * bảng rủi ro "Event trùng lặp").
+     */
+    void processTicketsGenerated(TicketsGeneratedEvent event);
 
     /**
      * Chuyển các sự kiện PUBLISHED đã qua {@code endTime} sang COMPLETED — dùng

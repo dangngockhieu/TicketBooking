@@ -37,7 +37,6 @@ class TicketsGeneratedListenerTest {
 
         listener.onTicketsGenerated(event);
 
-        verify(eventService).reduceAvailableQuantity(catalogEventId, vipClassId, 2);
-        verify(eventService).reduceAvailableQuantity(catalogEventId, gaClassId, 5);
+        verify(eventService).processTicketsGenerated(event);
     }
 }

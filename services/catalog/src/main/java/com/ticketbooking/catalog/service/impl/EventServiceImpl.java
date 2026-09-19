@@ -2,20 +2,24 @@ package com.ticketbooking.catalog.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketbooking.catalog.dto.request.CreateEventRequest;
+import com.ticketbooking.catalog.dto.request.EventFeeUpdateRequest;
 import com.ticketbooking.catalog.dto.request.EventSearchFilter;
 import com.ticketbooking.catalog.dto.request.TicketClassRequest;
 import com.ticketbooking.catalog.dto.request.UpdateEventRequest;
 import com.ticketbooking.catalog.dto.response.EventResponse;
 import com.ticketbooking.catalog.entity.Category;
 import com.ticketbooking.catalog.entity.Event;
+import com.ticketbooking.catalog.entity.ProcessedTicketEvent;
 import com.ticketbooking.catalog.entity.TicketClass;
 import com.ticketbooking.catalog.enums.EventStatus;
 import com.ticketbooking.catalog.repository.CategoryRepository;
 import com.ticketbooking.catalog.repository.EventRepository;
 import com.ticketbooking.catalog.repository.EventSpecifications;
+import com.ticketbooking.catalog.repository.ProcessedTicketEventRepository;
 import com.ticketbooking.catalog.repository.TicketClassRepository;
 import com.ticketbooking.catalog.service.EventService;
 import com.ticketbooking.common.dto.PageResponse;
+import com.ticketbooking.common.event.TicketsGeneratedEvent;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.common.exception.ForbiddenException;
 import com.ticketbooking.common.exception.ResourceNotFoundException;
@@ -49,6 +53,7 @@ public class EventServiceImpl implements EventService {
     private final EventRepository eventRepository;
     private final CategoryRepository categoryRepository;
     private final TicketClassRepository ticketClassRepository;
+    private final ProcessedTicketEventRepository processedTicketEventRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -56,11 +61,13 @@ public class EventServiceImpl implements EventService {
             EventRepository eventRepository,
             CategoryRepository categoryRepository,
             TicketClassRepository ticketClassRepository,
+            ProcessedTicketEventRepository processedTicketEventRepository,
             StringRedisTemplate redisTemplate,
             ObjectMapper objectMapper) {
         this.eventRepository = eventRepository;
         this.categoryRepository = categoryRepository;
         this.ticketClassRepository = ticketClassRepository;
+        this.processedTicketEventRepository = processedTicketEventRepository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
     }
@@ -189,6 +196,19 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
+    public EventResponse updateFees(UUID eventId, EventFeeUpdateRequest request) {
+        Event event = eventRepository.findWithDetailsById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sự kiện."));
+
+        event.setCommissionRate(request.commissionRate());
+        event.setFlatFeePerTicket(request.flatFeePerTicket());
+
+        Event saved = eventRepository.save(event);
+        invalidateCaches(saved.getId());
+        return EventResponse.from(saved);
+    }
+
+    @Override
     public void reduceAvailableQuantity(UUID eventId, UUID ticketClassId, int quantity) {
         int affected = ticketClassRepository.decrementAvailableQuantity(ticketClassId, quantity);
         if (affected == 0) {
@@ -198,6 +218,24 @@ public class EventServiceImpl implements EventService {
             return;
         }
         invalidateCaches(eventId);
+    }
+
+    @Override
+    public void processTicketsGenerated(TicketsGeneratedEvent event) {
+        if (processedTicketEventRepository.existsById(event.getBookingId())) {
+            log.info("tickets.generated cho booking {} đã được xử lý trước đó, bỏ qua (idempotent).",
+                    event.getBookingId());
+            return;
+        }
+
+        // Ghi marker cùng transaction với việc trừ kho bên dưới — hoặc cả hai
+        // cùng commit, hoặc cả hai cùng rollback khi có lỗi giữa chừng, tránh
+        // vừa mất marker vừa mất số lượng vé nếu redeliver.
+        processedTicketEventRepository.save(new ProcessedTicketEvent(event.getBookingId()));
+
+        for (TicketsGeneratedEvent.TicketClassQuantity item : event.getItems()) {
+            reduceAvailableQuantity(event.getCatalogEventId(), item.getTicketClassId(), item.getQuantity());
+        }
     }
 
     @Override
