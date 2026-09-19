@@ -44,6 +44,10 @@ spring:
           uri: lb://catalog-service
           predicates:
             - Path=/api/admin/categories/**
+        - id: catalog-service-admin-events
+          uri: lb://catalog-service
+          predicates:
+            - Path=/api/admin/events/**
         - id: auth-service-admin-organizers
           uri: lb://auth-service
           predicates:
