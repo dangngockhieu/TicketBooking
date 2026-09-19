@@ -4,6 +4,8 @@ import com.ticketbooking.common.exception.BadGatewayException;
 import com.ticketbooking.payment.config.MomoProperties;
 import com.ticketbooking.payment.momo.dto.MomoCreatePaymentRequest;
 import com.ticketbooking.payment.momo.dto.MomoCreatePaymentResponse;
+import com.ticketbooking.payment.momo.dto.MomoDisburseRequest;
+import com.ticketbooking.payment.momo.dto.MomoDisburseResponse;
 import com.ticketbooking.payment.momo.dto.MomoRefundRequest;
 import com.ticketbooking.payment.momo.dto.MomoRefundResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,7 @@ public class MomoClient {
 
     private static final String CREATE_PATH = "/v2/gateway/api/create";
     private static final String REFUND_PATH = "/v2/gateway/api/refund";
+    private static final String DISBURSE_PATH = "/v2/gateway/api/disburse";
     private static final String REQUEST_TYPE = "captureWallet";
 
     private final RestClient restClient;
@@ -130,6 +133,50 @@ public class MomoClient {
             return response;
         } catch (RestClientException e) {
             log.error("Lỗi gọi MoMo refund cho booking {} (transId={}): {}", bookingId, transId, e.getMessage());
+            throw new BadGatewayException("Không thể kết nối tới cổng thanh toán MoMo.");
+        }
+    }
+
+    /**
+     * Chi trả cho Organizer qua MoMo Business Disbursement API (xem
+     * docs/api-design.md §7.5) — {@code receiver} là số tài khoản ngân hàng
+     * hoặc số điện thoại ví MoMo người nhận.
+     */
+    public MomoDisburseResponse disburse(UUID payoutRequestId, BigDecimal amount, String receiver, String description) {
+        String requestId = UUID.randomUUID().toString();
+        String orderId = payoutRequestId.toString();
+        String amountStr = amount.toBigInteger().toString();
+
+        String rawSignature = "accessKey=" + properties.accessKey()
+                + "&amount=" + amountStr
+                + "&description=" + description
+                + "&orderId=" + orderId
+                + "&partnerCode=" + properties.partnerCode()
+                + "&receiver=" + receiver
+                + "&requestId=" + requestId;
+
+        MomoDisburseRequest request = new MomoDisburseRequest(
+                properties.partnerCode(),
+                properties.accessKey(),
+                requestId,
+                orderId,
+                amountStr,
+                receiver,
+                description,
+                signatureService.sign(rawSignature));
+
+        try {
+            MomoDisburseResponse response = restClient.post()
+                    .uri(DISBURSE_PATH)
+                    .body(request)
+                    .retrieve()
+                    .body(MomoDisburseResponse.class);
+            if (response == null) {
+                throw new BadGatewayException("MoMo không trả về phản hồi hợp lệ.");
+            }
+            return response;
+        } catch (RestClientException e) {
+            log.error("Lỗi gọi MoMo disburse cho payout {}: {}", payoutRequestId, e.getMessage());
             throw new BadGatewayException("Không thể kết nối tới cổng thanh toán MoMo.");
         }
     }

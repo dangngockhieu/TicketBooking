@@ -1048,8 +1048,11 @@ Khi Admin duyệt (`PATCH /admin/payouts/{id}/status` → `APPROVED` rồi → `
 POST https://payment.momo.vn/v2/gateway/api/disburse
 ```
 
-- Request ký bằng `signature` (HMAC-SHA256) như các API MoMo khác, gồm `partnerCode`, `requestId`, `orderId` (= `payoutRequestId`), `amount`, `receiver` (số tài khoản ngân hàng hoặc số điện thoại ví MoMo người nhận), `description`.
-- Kết quả trả về đồng bộ (`resultCode`) hoặc callback bất đồng bộ tùy loại giao dịch (chuyển khoản ngân hàng thường xử lý bất đồng bộ, có IPN riêng cho Disbursement khác với IPN thanh toán ở mục 5.2).
+- Request ký bằng `signature` (HMAC-SHA256) như các API MoMo khác, gồm `partnerCode`, `accessKey`, `requestId`, `orderId` (= `payoutRequestId`), `amount`, `receiver` (số tài khoản ngân hàng hoặc số điện thoại ví MoMo người nhận), `description`. Raw string (alphabetical, cùng chuẩn `accessKey` như §5.1/§5.2/§5.4):
+  ```
+  rawSignature = "accessKey=...&amount=50000000&description=...&orderId=<payoutRequestId>&partnerCode=MOMO&receiver=...&requestId=..."
+  ```
+- Kết quả trả về đồng bộ (`resultCode`) hoặc callback bất đồng bộ tùy loại giao dịch (chuyển khoản ngân hàng thường xử lý bất đồng bộ, có IPN riêng cho Disbursement khác với IPN thanh toán ở mục 5.2 — **chưa triển khai ở bản hiện tại**, tạm xử lý đồng bộ theo `resultCode`).
 - Thành công → `PayoutRequest.status = PAID`, `processedAt = now()`.
 - Thất bại → giữ nguyên `APPROVED`, ghi log lỗi để Admin xử lý lại hoặc chuyển khoản thủ công dự phòng.
 

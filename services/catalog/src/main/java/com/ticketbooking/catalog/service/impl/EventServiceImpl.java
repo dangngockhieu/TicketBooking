@@ -30,7 +30,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -196,6 +198,19 @@ public class EventServiceImpl implements EventService {
             return;
         }
         invalidateCaches(eventId);
+    }
+
+    @Override
+    public void completeEndedEvents() {
+        List<Event> ended = eventRepository.findByStatusAndEndTimeBefore(EventStatus.PUBLISHED, Instant.now());
+        for (Event event : ended) {
+            event.setStatus(EventStatus.COMPLETED);
+            eventRepository.save(event);
+            invalidateCaches(event.getId());
+        }
+        if (!ended.isEmpty()) {
+            log.info("Đã chuyển {} sự kiện sang COMPLETED.", ended.size());
+        }
     }
 
     private Category resolveCategory(UUID categoryId) {

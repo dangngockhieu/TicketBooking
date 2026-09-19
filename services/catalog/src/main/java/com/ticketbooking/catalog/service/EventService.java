@@ -29,4 +29,11 @@ public interface EventService {
      * xem docs/development-plan.md GĐ4 mục 2) và invalidate cache liên quan.
      */
     void reduceAvailableQuantity(UUID eventId, UUID ticketClassId, int quantity);
+
+    /**
+     * Chuyển các sự kiện PUBLISHED đã qua {@code endTime} sang COMPLETED — dùng
+     * bởi {@code EventCompletionScheduler}, kích hoạt payout tự động phía
+     * Payment Service 7 ngày sau (xem docs/development-plan.md GĐ4 mục 4).
+     */
+    void completeEndedEvents();
 }

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -37,5 +38,41 @@ public class OrganizerWalletServiceImpl implements OrganizerWalletService {
                 .orElseGet(() -> OrganizerWallet.builder().organizerId(organizerId).build());
         wallet.setAvailableBalance(wallet.getAvailableBalance().add(net));
         organizerWalletRepository.save(wallet);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<OrganizerWallet> findWallet(UUID organizerId) {
+        return organizerWalletRepository.findByOrganizerId(organizerId);
+    }
+
+    @Override
+    public boolean reserveForPayout(UUID organizerId, BigDecimal amount) {
+        OrganizerWallet wallet = organizerWalletRepository.findByOrganizerId(organizerId).orElse(null);
+        if (wallet == null || wallet.getAvailableBalance().compareTo(amount) < 0) {
+            return false;
+        }
+        wallet.setAvailableBalance(wallet.getAvailableBalance().subtract(amount));
+        wallet.setPendingPayout(wallet.getPendingPayout().add(amount));
+        organizerWalletRepository.save(wallet);
+        return true;
+    }
+
+    @Override
+    public void releaseReservedPayout(UUID organizerId, BigDecimal amount) {
+        organizerWalletRepository.findByOrganizerId(organizerId).ifPresent(wallet -> {
+            wallet.setPendingPayout(wallet.getPendingPayout().subtract(amount));
+            wallet.setAvailableBalance(wallet.getAvailableBalance().add(amount));
+            organizerWalletRepository.save(wallet);
+        });
+    }
+
+    @Override
+    public void markPayoutPaid(UUID organizerId, BigDecimal amount) {
+        organizerWalletRepository.findByOrganizerId(organizerId).ifPresent(wallet -> {
+            wallet.setPendingPayout(wallet.getPendingPayout().subtract(amount));
+            wallet.setTotalWithdrawn(wallet.getTotalWithdrawn().add(amount));
+            organizerWalletRepository.save(wallet);
+        });
     }
 }

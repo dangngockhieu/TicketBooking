@@ -239,7 +239,8 @@ class PaymentServiceImplTest {
 
         when(transactionRepository.findByGatewayTransId("4123456789")).thenReturn(Optional.empty());
         when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
-        CatalogEventDto event = new CatalogEventDto(eventId, organizerId, new BigDecimal("0.05"), new BigDecimal("3000"));
+        CatalogEventDto event = new CatalogEventDto(eventId, organizerId, "PUBLISHED", null,
+                new BigDecimal("0.05"), new BigDecimal("3000"));
         when(catalogClient.getEvent(eventId)).thenReturn(event);
 
         paymentService.handleMomoIpn(request);
