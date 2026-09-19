@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketbooking.common.exception.BadGatewayException;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.payment.client.BookingClient;
+import com.ticketbooking.payment.client.CatalogClient;
 import com.ticketbooking.payment.client.dto.BookingDto;
+import com.ticketbooking.payment.client.dto.CatalogEventDto;
 import com.ticketbooking.payment.config.MomoProperties;
 import com.ticketbooking.payment.dto.request.InitiatePaymentRequest;
 import com.ticketbooking.payment.dto.response.PaymentInitiateResponse;
@@ -51,10 +53,16 @@ class PaymentServiceImplTest {
     private BookingClient bookingClient;
 
     @Mock
+    private CatalogClient catalogClient;
+
+    @Mock
     private MomoClient momoClient;
 
     @Mock
     private PaymentEventPublisher eventPublisher;
+
+    @Mock
+    private OrganizerWalletService organizerWalletService;
 
     private MomoProperties momoProperties;
     private MomoSignatureService momoSignatureService;
@@ -70,15 +78,15 @@ class PaymentServiceImplTest {
                 "https://test-payment.momo.vn", "https://ticketbooking.vn/payment/result",
                 "http://localhost:8080/api/payments/momo/ipn");
         momoSignatureService = new MomoSignatureService(momoProperties);
-        paymentService = new PaymentServiceImpl(transactionRepository, bookingClient, momoClient,
-                momoSignatureService, momoProperties, eventPublisher, new ObjectMapper());
+        paymentService = new PaymentServiceImpl(transactionRepository, bookingClient, catalogClient, momoClient,
+                momoSignatureService, momoProperties, eventPublisher, organizerWalletService, new ObjectMapper());
         customerId = UUID.randomUUID();
         bookingId = UUID.randomUUID();
     }
 
     private BookingDto pendingBooking() {
         return new BookingDto(bookingId, UUID.randomUUID(), "PENDING_PAYMENT",
-                new BigDecimal("3000000"), Instant.now().plusSeconds(600));
+                new BigDecimal("3000000"), 2, Instant.now().plusSeconds(600));
     }
 
     @Test
@@ -111,7 +119,7 @@ class PaymentServiceImplTest {
     @Test
     void initiate_throwsConflict_whenBookingAlreadyPaid() {
         BookingDto paidBooking = new BookingDto(bookingId, UUID.randomUUID(), "PAID",
-                new BigDecimal("3000000"), Instant.now().plusSeconds(600));
+                new BigDecimal("3000000"), 2, Instant.now().plusSeconds(600));
         when(bookingClient.getBooking(bookingId, TOKEN)).thenReturn(paidBooking);
 
         assertThrows(ConflictException.class, () -> paymentService.initiate(
@@ -122,7 +130,7 @@ class PaymentServiceImplTest {
     @Test
     void initiate_throwsConflict_whenBookingExpired() {
         BookingDto expiredBooking = new BookingDto(bookingId, UUID.randomUUID(), "PENDING_PAYMENT",
-                new BigDecimal("3000000"), Instant.now().minusSeconds(60));
+                new BigDecimal("3000000"), 2, Instant.now().minusSeconds(60));
         when(bookingClient.getBooking(bookingId, TOKEN)).thenReturn(expiredBooking);
 
         assertThrows(ConflictException.class, () -> paymentService.initiate(
@@ -215,6 +223,45 @@ class PaymentServiceImplTest {
         ArgumentCaptor<PaymentSuccessEvent> captor = ArgumentCaptor.forClass(PaymentSuccessEvent.class);
         verify(eventPublisher).publishSuccess(captor.capture());
         assertEquals(bookingId, captor.getValue().getBookingId());
+        verifyNoInteractions(catalogClient, organizerWalletService);
+    }
+
+    @Test
+    void handleMomoIpn_success_creditsOrganizerWallet_whenEventIdAndQuantitySnapshotted() {
+        UUID transactionId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID organizerId = UUID.randomUUID();
+        Transaction transaction = Transaction.builder()
+                .id(transactionId).bookingId(bookingId).eventId(eventId).quantity(2)
+                .amount(new BigDecimal("3000000"))
+                .paymentMethod("MOMO").status(TransactionStatus.PENDING).build();
+        MomoIpnRequest request = ipnRequest(transactionId, 3000000L, 0, "Successful.");
+
+        when(transactionRepository.findByGatewayTransId("4123456789")).thenReturn(Optional.empty());
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
+        CatalogEventDto event = new CatalogEventDto(eventId, organizerId, new BigDecimal("0.05"), new BigDecimal("3000"));
+        when(catalogClient.getEvent(eventId)).thenReturn(event);
+
+        paymentService.handleMomoIpn(request);
+
+        verify(organizerWalletService).creditForBooking(organizerId, new BigDecimal("3000000"),
+                new BigDecimal("0.05"), new BigDecimal("3000"), 2);
+    }
+
+    @Test
+    void handleMomoIpn_success_skipsWalletCredit_whenEventIdMissing() {
+        UUID transactionId = UUID.randomUUID();
+        Transaction transaction = Transaction.builder()
+                .id(transactionId).bookingId(bookingId).amount(new BigDecimal("3000000"))
+                .paymentMethod("MOMO").status(TransactionStatus.PENDING).build();
+        MomoIpnRequest request = ipnRequest(transactionId, 3000000L, 0, "Successful.");
+
+        when(transactionRepository.findByGatewayTransId("4123456789")).thenReturn(Optional.empty());
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
+
+        paymentService.handleMomoIpn(request);
+
+        verifyNoInteractions(catalogClient, organizerWalletService);
     }
 
     @Test

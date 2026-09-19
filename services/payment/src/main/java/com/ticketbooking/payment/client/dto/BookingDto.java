@@ -17,6 +17,7 @@ public record BookingDto(
         UUID eventId,
         String status,
         BigDecimal totalAmount,
+        int quantity,
         Instant expiredAt
 ) {
 }

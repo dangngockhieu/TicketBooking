@@ -29,6 +29,20 @@ public class Transaction {
     @Column(name = "booking_id", nullable = false)
     private UUID bookingId;
 
+    /**
+     * 🔗 Soft Key → Catalog Service events.id — snapshot tại thời điểm
+     * {@code initiate()} (không có trong docs/database-schema.md bản gốc).
+     * Cần thiết vì MoMo IPN Callback (§5.2) không mang JWT của khách, nên
+     * không thể forward sang Booking Service để tra cứu lại eventId/quantity
+     * lúc tính tiền vào ví Organizer — xem docs/database-schema.md đã cập nhật.
+     */
+    @Column(name = "event_id")
+    private UUID eventId;
+
+    /** Snapshot số lượng vé tại thời điểm đặt — dùng để tính phí cố định/vé khi chia tiền vào ví Organizer. */
+    @Column(name = "quantity")
+    private Integer quantity;
+
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal amount;
 

@@ -30,7 +30,7 @@ class BookingClientTest {
     void getBooking_returnsDeserializedData_andForwardsBearerToken() throws Exception {
         UUID bookingId = UUID.randomUUID();
         BookingDto dto = new BookingDto(bookingId, UUID.randomUUID(), "PENDING_PAYMENT",
-                new BigDecimal("3000000"), Instant.now().plusSeconds(600));
+                new BigDecimal("3000000"), 2, Instant.now().plusSeconds(600));
         String body = objectMapper.writeValueAsString(ApiResponse.success(dto));
 
         RestClient.Builder builder = RestClient.builder();

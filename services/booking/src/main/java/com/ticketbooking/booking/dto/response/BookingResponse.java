@@ -18,6 +18,7 @@ public record BookingResponse(
         UUID eventId,
         BookingStatus status,
         BigDecimal totalAmount,
+        int quantity,
         List<ItemSummary> items,
         Instant expiredAt,
         /** Chưa khả dụng — cần Payment Service (GĐ4) sinh payUrl. */
@@ -55,6 +56,7 @@ public record BookingResponse(
                 booking.getEventId(),
                 booking.getStatus(),
                 booking.getTotalAmount(),
+                booking.getQuantity(),
                 items,
                 booking.getExpiredAt(),
                 null,

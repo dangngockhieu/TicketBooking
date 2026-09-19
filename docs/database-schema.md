@@ -370,6 +370,8 @@ TTL:    không set (clean up bằng background job)
 |-----|------|-----------|--------|
 | `id` | `UUID` | **PK** | Mã giao dịch nội bộ |
 | `booking_id` | `UUID` | NOT NULL | 🔗 Soft Key → Booking.bookings |
+| `event_id` | `UUID` | NULL | 🔗 Soft Key → Catalog.events — snapshot tại `initiate()`. MoMo IPN không mang JWT khách nên không forward được sang Booking Service để tra lại; cần trực tiếp để tính phí ví Organizer 🆕 |
+| `quantity` | `INTEGER` | NULL | Snapshot số lượng vé tại `initiate()` — dùng tính `flat_fee_per_ticket` 🆕 |
 | `amount` | `DECIMAL(15,2)` | NOT NULL | Số tiền thanh toán |
 | `payment_method` | `VARCHAR(50)` | NOT NULL | Phương thức (MOMO) |
 | `gateway_trans_id` | `VARCHAR(255)` | UNIQUE | Mã giao dịch từ cổng thanh toán |
@@ -383,6 +385,8 @@ TTL:    không set (clean up bằng background job)
 CREATE TABLE transactions (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     booking_id        UUID           NOT NULL,  -- Soft Key → Booking Service
+    event_id          UUID,                     -- Soft Key → Catalog Service, snapshot tại initiate()
+    quantity          INTEGER,                  -- Snapshot số lượng vé tại initiate()
     amount            DECIMAL(15, 2) NOT NULL CHECK (amount > 0),
     payment_method    VARCHAR(50)    NOT NULL,
     gateway_trans_id  VARCHAR(255)   UNIQUE,

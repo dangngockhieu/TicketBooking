@@ -10,7 +10,9 @@ import com.ticketbooking.common.exception.BadGatewayException;
 import com.ticketbooking.common.exception.BadRequestException;
 import com.ticketbooking.common.exception.ConflictException;
 import com.ticketbooking.payment.client.BookingClient;
+import com.ticketbooking.payment.client.CatalogClient;
 import com.ticketbooking.payment.client.dto.BookingDto;
+import com.ticketbooking.payment.client.dto.CatalogEventDto;
 import com.ticketbooking.payment.config.MomoProperties;
 import com.ticketbooking.payment.dto.request.InitiatePaymentRequest;
 import com.ticketbooking.payment.dto.response.PaymentInitiateResponse;
@@ -23,6 +25,7 @@ import com.ticketbooking.payment.momo.dto.MomoCreatePaymentResponse;
 import com.ticketbooking.payment.momo.dto.MomoIpnRequest;
 import com.ticketbooking.payment.momo.dto.MomoRefundResponse;
 import com.ticketbooking.payment.repository.TransactionRepository;
+import com.ticketbooking.payment.service.OrganizerWalletService;
 import com.ticketbooking.payment.service.PaymentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -46,26 +49,32 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final TransactionRepository transactionRepository;
     private final BookingClient bookingClient;
+    private final CatalogClient catalogClient;
     private final MomoClient momoClient;
     private final MomoSignatureService momoSignatureService;
     private final MomoProperties momoProperties;
     private final PaymentEventPublisher eventPublisher;
+    private final OrganizerWalletService organizerWalletService;
     private final ObjectMapper objectMapper;
 
     public PaymentServiceImpl(
             TransactionRepository transactionRepository,
             BookingClient bookingClient,
+            CatalogClient catalogClient,
             MomoClient momoClient,
             MomoSignatureService momoSignatureService,
             MomoProperties momoProperties,
             PaymentEventPublisher eventPublisher,
+            OrganizerWalletService organizerWalletService,
             ObjectMapper objectMapper) {
         this.transactionRepository = transactionRepository;
         this.bookingClient = bookingClient;
+        this.catalogClient = catalogClient;
         this.momoClient = momoClient;
         this.momoSignatureService = momoSignatureService;
         this.momoProperties = momoProperties;
         this.eventPublisher = eventPublisher;
+        this.organizerWalletService = organizerWalletService;
         this.objectMapper = objectMapper;
     }
 
@@ -89,6 +98,8 @@ public class PaymentServiceImpl implements PaymentService {
 
         Transaction transaction = Transaction.builder()
                 .bookingId(booking.id())
+                .eventId(booking.eventId())
+                .quantity(booking.quantity())
                 .amount(booking.totalAmount())
                 .paymentMethod("MOMO")
                 .status(TransactionStatus.PENDING)
@@ -153,6 +164,8 @@ public class PaymentServiceImpl implements PaymentService {
             transaction.setStatus(TransactionStatus.SUCCESS);
             transaction.setPaidAt(Instant.now());
             transactionRepository.save(transaction);
+
+            creditOrganizerWallet(transaction);
 
             eventPublisher.publishSuccess(PaymentSuccessEvent.builder()
                     .eventType("payment.success")
@@ -223,6 +236,27 @@ public class PaymentServiceImpl implements PaymentService {
                 .gatewayTransId(transaction.getGatewayTransId())
                 .refundedAt(Instant.now())
                 .build());
+    }
+
+    /**
+     * Cộng tiền vào ví Organizer sau khi trừ phí nền tảng (xem
+     * docs/development-plan.md GĐ4 mục 4). Best-effort: nếu thiếu snapshot
+     * eventId/quantity (giao dịch cũ trước khi có cột này) hoặc Catalog
+     * Service không phản hồi, chỉ log lỗi — KHÔNG chặn luồng IPN chính (khách
+     * đã thanh toán thành công, không thể rollback vì lỗi ở bước phụ này).
+     */
+    private void creditOrganizerWallet(Transaction transaction) {
+        if (transaction.getEventId() == null || transaction.getQuantity() == null) {
+            log.warn("Giao dịch {} thiếu eventId/quantity, bỏ qua cộng ví Organizer.", transaction.getId());
+            return;
+        }
+        try {
+            CatalogEventDto event = catalogClient.getEvent(transaction.getEventId());
+            organizerWalletService.creditForBooking(event.organizerId(), transaction.getAmount(),
+                    event.commissionRate(), event.flatFeePerTicket(), transaction.getQuantity());
+        } catch (RuntimeException e) {
+            log.error("Không thể cộng ví Organizer cho giao dịch {}: {}", transaction.getId(), e.getMessage(), e);
+        }
     }
 
     private String buildIpnRawSignature(MomoIpnRequest request) {
