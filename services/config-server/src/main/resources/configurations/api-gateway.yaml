@@ -22,6 +22,16 @@ spring:
           uri: lb://user-service
           predicates:
             - Path=/api/users/**
+        - id: user-service-organizer-bank-account
+          uri: lb://user-service
+          predicates:
+            - Path=/api/organizer/bank-account
+        # Cụ thể hơn phải đứng TRƯỚC auth-service-admin-organizers bên dưới —
+        # Gateway khớp route theo thứ tự khai báo, khớp đầu tiên thắng.
+        - id: user-service-admin-bank-account
+          uri: lb://user-service
+          predicates:
+            - Path=/api/admin/organizers/*/bank-account/**
         - id: catalog-service-events
           uri: lb://catalog-service
           predicates:
@@ -34,10 +44,30 @@ spring:
           uri: lb://catalog-service
           predicates:
             - Path=/api/admin/categories/**
+        - id: auth-service-admin-organizers
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/admin/organizers/**
         - id: booking-service
           uri: lb://booking-service
           predicates:
             - Path=/api/bookings/**
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/payments/**
+        - id: payment-service-organizer-wallet
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/organizer/wallet
+        - id: payment-service-organizer-payouts
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/organizer/payouts/**
+        - id: payment-service-admin-payouts
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/admin/payouts/**
 
   # §9.2 — JWT sơ bộ tại Gateway. Cùng jwk-set-uri với user-service: chỉ verify
   # bằng Public Key (Zero Trust), không giữ bí mật nào của auth-service.

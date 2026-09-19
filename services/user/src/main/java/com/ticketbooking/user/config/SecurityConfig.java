@@ -34,6 +34,8 @@ public class SecurityConfig {
                                 .authorizeHttpRequests(authz -> authz
                                                 .requestMatchers("/actuator/**")
                                                 .permitAll()
+                                                .requestMatchers("/api/internal/**")
+                                                .permitAll()
                                                 .anyRequest().authenticated())
                                 .oauth2ResourceServer(oauth2 -> oauth2
                                                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
