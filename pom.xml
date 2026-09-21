@@ -29,6 +29,7 @@
         <module>services/catalog</module>
         <module>services/booking</module>
         <module>services/payment</module>
+        <module>services/queue</module>
     </modules>
 
     <properties>

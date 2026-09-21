@@ -1,0 +1,24 @@
+# ==============================================================================
+# QUEUE SERVICE CONFIGURATION (PHÂN PHỐI BỞI CONFIG SERVER)
+# ==============================================================================
+server:
+  port: 8087
+
+spring:
+  # Redis dùng chung với Catalog/Booking Service (container redis :6379) — toàn
+  # bộ trạng thái phòng chờ ảo (hàng chờ, active shoppers, access token,
+  # heartbeat) nằm ở đây, không có Postgres riêng cho Queue Service (xem
+  # docs/virtual-waiting-room.md §3).
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+
+  # OAuth2 Resource Server — CHỈ xác thực JWT bằng Public Key lấy từ JWKS của
+  # auth-service (Zero Trust). Xem docs/system-design.md §8, §9.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8081/.well-known/jwks.json
