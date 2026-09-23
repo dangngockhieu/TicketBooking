@@ -13,6 +13,13 @@ public record CreateBookingRequest(
 
         @NotEmpty(message = "Danh sách vé không được để trống")
         @Valid
-        List<BookingItemRequest> items
+        List<BookingItemRequest> items,
+
+        /**
+         * Access token cấp bởi Queue Service khi phòng chờ ảo đang bật cho sự
+         * kiện này (xem docs/virtual-waiting-room.md §8) — {@code null} nếu
+         * phòng chờ đang tắt.
+         */
+        String queueAccessToken
 ) {
 }

@@ -1,7 +1,9 @@
 package com.ticketbooking.booking.service;
 
 import com.ticketbooking.booking.client.CatalogClient;
+import com.ticketbooking.booking.client.QueueClient;
 import com.ticketbooking.booking.client.dto.CatalogEventDto;
+import com.ticketbooking.booking.client.dto.QueueAccessDto;
 import com.ticketbooking.booking.dto.request.BookingItemRequest;
 import com.ticketbooking.booking.dto.request.CreateBookingRequest;
 import com.ticketbooking.booking.dto.response.BookingResponse;
@@ -42,6 +44,9 @@ class BookingServiceImplTest {
     private CatalogClient catalogClient;
 
     @Mock
+    private QueueClient queueClient;
+
+    @Mock
     private SeatHoldService seatHoldService;
 
     @Mock
@@ -56,7 +61,8 @@ class BookingServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        bookingService = new BookingServiceImpl(bookingRepository, catalogClient, seatHoldService, eventPublisher, 600);
+        bookingService = new BookingServiceImpl(bookingRepository, catalogClient, queueClient, seatHoldService, eventPublisher, 600);
+        lenient().when(queueClient.checkAccess(any(), any(), any())).thenReturn(new QueueAccessDto(false, true));
         customerId = UUID.randomUUID();
         eventId = UUID.randomUUID();
         vipClassId = UUID.randomUUID();
@@ -79,7 +85,7 @@ class BookingServiceImplTest {
         });
 
         CreateBookingRequest request = new CreateBookingRequest(eventId, List.of(
-                new BookingItemRequest(vipClassId, 2)));
+                new BookingItemRequest(vipClassId, 2)), null);
 
         BookingResponse response = bookingService.create(customerId, request);
 
@@ -101,7 +107,7 @@ class BookingServiceImplTest {
 
         CreateBookingRequest request = new CreateBookingRequest(eventId, List.of(
                 new BookingItemRequest(vipClassId, 2),
-                new BookingItemRequest(gaClassId, 5)));
+                new BookingItemRequest(gaClassId, 5)), null);
 
         assertThrows(ConflictException.class, () -> bookingService.create(customerId, request));
 
@@ -114,7 +120,7 @@ class BookingServiceImplTest {
         when(catalogClient.getEvent(eventId)).thenReturn(publishedEvent());
 
         CreateBookingRequest request = new CreateBookingRequest(eventId, List.of(
-                new BookingItemRequest(UUID.randomUUID(), 1)));
+                new BookingItemRequest(UUID.randomUUID(), 1)), null);
 
         assertThrows(ResourceNotFoundException.class, () -> bookingService.create(customerId, request));
         verifyNoInteractions(seatHoldService);
@@ -127,7 +133,7 @@ class BookingServiceImplTest {
         when(catalogClient.getEvent(eventId)).thenReturn(event);
 
         CreateBookingRequest request = new CreateBookingRequest(eventId, List.of(
-                new BookingItemRequest(vipClassId, 1)));
+                new BookingItemRequest(vipClassId, 1)), null);
 
         assertThrows(ConflictException.class, () -> bookingService.create(customerId, request));
     }

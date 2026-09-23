@@ -1,7 +1,9 @@
 package com.ticketbooking.booking.service.impl;
 
 import com.ticketbooking.booking.client.CatalogClient;
+import com.ticketbooking.booking.client.QueueClient;
 import com.ticketbooking.booking.client.dto.CatalogEventDto;
+import com.ticketbooking.booking.client.dto.QueueAccessDto;
 import com.ticketbooking.booking.dto.request.BookingItemRequest;
 import com.ticketbooking.booking.dto.request.CreateBookingRequest;
 import com.ticketbooking.booking.dto.response.BookingResponse;
@@ -42,6 +44,7 @@ public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
     private final CatalogClient catalogClient;
+    private final QueueClient queueClient;
     private final SeatHoldService seatHoldService;
     private final BookingEventPublisher eventPublisher;
     private final long holdTtlSeconds;
@@ -49,11 +52,13 @@ public class BookingServiceImpl implements BookingService {
     public BookingServiceImpl(
             BookingRepository bookingRepository,
             CatalogClient catalogClient,
+            QueueClient queueClient,
             SeatHoldService seatHoldService,
             BookingEventPublisher eventPublisher,
             @Value("${booking.hold.ttl-seconds:600}") long holdTtlSeconds) {
         this.bookingRepository = bookingRepository;
         this.catalogClient = catalogClient;
+        this.queueClient = queueClient;
         this.seatHoldService = seatHoldService;
         this.eventPublisher = eventPublisher;
         this.holdTtlSeconds = holdTtlSeconds;
@@ -62,6 +67,7 @@ public class BookingServiceImpl implements BookingService {
     @Override
     public BookingResponse create(UUID customerId, CreateBookingRequest request) {
         CatalogEventDto event = catalogClient.getEvent(request.eventId());
+        requireQueueAccess(request.eventId(), customerId, request.queueAccessToken());
 
         Instant now = Instant.now();
         if (event.saleStartTime() != null && now.isBefore(event.saleStartTime())) {
@@ -223,6 +229,20 @@ public class BookingServiceImpl implements BookingService {
                 .gatewayTransId(gatewayTransId)
                 .reason(reason)
                 .build());
+    }
+
+    /**
+     * Khi phòng chờ ảo đang bật cho sự kiện, chặn tạo đơn nếu thiếu/sai
+     * {@code queueAccessToken} (xem docs/virtual-waiting-room.md §8) — bỏ qua
+     * hoàn toàn nếu Queue Service không phản hồi được (tính năng phụ trợ,
+     * xem {@link QueueClient#checkAccess}).
+     */
+    private void requireQueueAccess(UUID eventId, UUID customerId, String queueAccessToken) {
+        QueueAccessDto access = queueClient.checkAccess(eventId, customerId, queueAccessToken);
+        if (access.enabled() && !access.valid()) {
+            throw new ForbiddenException(
+                    "Token không hợp lệ hoặc đã hết hạn. Vui lòng quay lại hàng chờ.");
+        }
     }
 
     private List<ResolvedItem> resolveItems(CatalogEventDto event, List<BookingItemRequest> items) {
