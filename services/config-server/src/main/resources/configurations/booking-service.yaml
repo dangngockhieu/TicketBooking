@@ -74,6 +74,11 @@ spring:
 catalog-service:
   name: catalog-service
 
+# Nơi gọi sang Queue Service để kiểm tra queueAccessToken khi phòng chờ ảo
+# đang bật cho sự kiện (xem docs/virtual-waiting-room.md §8).
+queue-service:
+  name: queue-service
+
 # Seat Hold — thời gian giữ chỗ trước khi tự động hủy đơn (xem
 booking:
   hold:
