@@ -72,6 +72,20 @@ spring:
           uri: lb://payment-service
           predicates:
             - Path=/api/admin/payouts/**
+        - id: queue-service-status
+          uri: lb://queue-service
+          predicates:
+            - Path=/api/queue/**
+        - id: queue-service-admin
+          uri: lb://queue-service
+          predicates:
+            - Path=/api/admin/queue/**
+        # WebSocket STOMP (Virtual Waiting Room) — Spring Cloud Gateway tự
+        # proxy WebSocket khi scheme là ws/wss, xem docs/virtual-waiting-room.md.
+        - id: queue-service-websocket
+          uri: lb:ws://queue-service
+          predicates:
+            - Path=/ws/queue/**
 
   # §9.2 — JWT sơ bộ tại Gateway. Cùng jwk-set-uri với user-service: chỉ verify
   # bằng Public Key (Zero Trust), không giữ bí mật nào của auth-service.
