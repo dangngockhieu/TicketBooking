@@ -38,13 +38,14 @@ public record EventResponse(
         }
     }
 
-    public record TicketClassSummary(UUID id, String name, BigDecimal price, Integer availableQuantity)
+    public record TicketClassSummary(UUID id, String name, BigDecimal price, Integer totalQuantity, Integer availableQuantity)
             implements Serializable {
         static TicketClassSummary from(TicketClass ticketClass) {
             return new TicketClassSummary(
                     ticketClass.getId(),
                     ticketClass.getName(),
                     ticketClass.getPrice(),
+                    ticketClass.getTotalQuantity(),
                     ticketClass.getAvailableQuantity());
         }
     }
