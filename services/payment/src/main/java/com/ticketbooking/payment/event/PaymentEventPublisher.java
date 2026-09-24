@@ -7,7 +7,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Producer cho Kafka Choreography (xem docs/development-plan.md GĐ4 mục 2-3).
+ * Producer cho Kafka Choreography.
  * Key = bookingId để mọi event của cùng 1 booking luôn nằm cùng partition,
  * giữ đúng thứ tự xử lý phía consumer (Booking Service).
  */

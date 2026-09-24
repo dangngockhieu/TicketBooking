@@ -13,8 +13,9 @@ import java.util.UUID;
 
 /**
  * Safety-net nhanh cho nhả ghế: bắt sự kiện Redis keyspace notification
- * {@code expired} của key {@code seat_hold:{event_id}:{ticket_class_id}:{customer_id}}
- * (xem docs/database-schema.md §4, docs/development-plan.md GĐ3 mục 3).
+ * {@code expired} của key
+ * {@code seat_hold:{event_id}:{ticket_class_id}:{customer_id}}
+ * (xem docs/database-schema.md §4).
  * <p>
  * Giá trị của key đã mất tại thời điểm nhận notification nên KHÔNG dùng để suy
  * ra số lượng vé — thay vào đó tra lại booking đang PENDING_PAYMENT của
@@ -53,7 +54,8 @@ public class SeatHoldExpirationListener implements MessageListener {
         try {
             UUID eventId = UUID.fromString(parts[0]);
             UUID customerId = UUID.fromString(parts[2]);
-            bookingRepository.findFirstByCustomerIdAndEventIdAndStatus(customerId, eventId, BookingStatus.PENDING_PAYMENT)
+            bookingRepository
+                    .findFirstByCustomerIdAndEventIdAndStatus(customerId, eventId, BookingStatus.PENDING_PAYMENT)
                     .ifPresent(booking -> bookingService.releaseExpiredBooking(booking.getId()));
         } catch (IllegalArgumentException e) {
             log.warn("Không parse được seat_hold key '{}': {}", expiredKey, e.getMessage());

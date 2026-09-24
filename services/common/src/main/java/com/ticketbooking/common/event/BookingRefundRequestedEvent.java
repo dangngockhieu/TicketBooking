@@ -11,7 +11,7 @@ import java.util.UUID;
 
 /**
  * Kafka topic {@code booking.refund-requested} — Saga Compensation (xem
- * docs/api-design.md §5.4, docs/development-plan.md GĐ4 mục 3): Booking
+ * docs/api-design.md §5.4: Booking
  * Service bắn khi khách đã bị trừ tiền (payment.success) nhưng không thể
  * hoàn tất sinh vé (booking không tồn tại, đã bị auto-release do hết hạn giữ
  * chỗ, hoặc lỗi hệ thống giữa chừng).

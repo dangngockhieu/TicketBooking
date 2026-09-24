@@ -10,11 +10,11 @@ public interface OrganizerWalletService {
 
     /**
      * Cộng tiền vào ví Organizer sau khi trừ hoa hồng nền tảng (xem
-     * docs/development-plan.md GĐ4 mục 4): {@code net = gross - gross*commissionRate
+     * {@code net = gross - gross*commissionRate
      * - flatFeePerTicket*quantity}, không cho âm. Tự tạo ví nếu Organizer chưa có.
      */
     void creditForBooking(UUID organizerId, BigDecimal grossAmount, BigDecimal commissionRate,
-                           BigDecimal flatFeePerTicket, int quantity);
+            BigDecimal flatFeePerTicket, int quantity);
 
     Optional<OrganizerWallet> findWallet(UUID organizerId);
 
@@ -25,9 +25,14 @@ public interface OrganizerWalletService {
      */
     boolean reserveForPayout(UUID organizerId, BigDecimal amount);
 
-    /** Trả {@code amount} từ pendingPayout về availableBalance (payout bị từ chối). */
+    /**
+     * Trả {@code amount} từ pendingPayout về availableBalance (payout bị từ chối).
+     */
     void releaseReservedPayout(UUID organizerId, BigDecimal amount);
 
-    /** Chuyển {@code amount} từ pendingPayout sang totalWithdrawn (payout chi trả thành công). */
+    /**
+     * Chuyển {@code amount} từ pendingPayout sang totalWithdrawn (payout chi trả
+     * thành công).
+     */
     void markPayoutPaid(UUID organizerId, BigDecimal amount);
 }

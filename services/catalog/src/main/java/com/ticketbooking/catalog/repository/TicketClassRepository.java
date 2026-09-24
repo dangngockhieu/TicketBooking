@@ -12,8 +12,7 @@ public interface TicketClassRepository extends JpaRepository<TicketClass, UUID> 
 
     /**
      * Trừ vĩnh viễn {@code available_quantity} sau khi thanh toán thành công
-     * (xem docs/development-plan.md GĐ4 mục 2, Consumer 2). Guard
-     * {@code available_quantity >= :quantity} chống âm kho — về lý thuyết
+     * Guard {@code available_quantity >= :quantity} chống âm kho — về lý thuyết
      * không xảy ra vì Redis hold_count đã chặn overbooking từ bước giữ chỗ,
      * đây chỉ là lưới an toàn.
      *

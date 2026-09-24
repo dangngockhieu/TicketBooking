@@ -14,7 +14,7 @@ import java.util.UUID;
 /**
  * Kafka topic {@code tickets.generated} — Booking Service bắn sau khi xác
  * nhận thanh toán thành công, Catalog Service lắng nghe để trừ vĩnh viễn
- * {@code available_quantity} (xem docs/development-plan.md GĐ4 mục 2).
+ * {@code available_quantity}
  */
 @Getter
 @Setter
@@ -25,7 +25,10 @@ public class TicketsGeneratedEvent extends BaseEvent {
 
     private UUID bookingId;
 
-    /** Sự kiện (concert/show) bên Catalog Service — đặt tên khác {@code eventId} của {@link BaseEvent} (đó là id của bản thân message Kafka). */
+    /**
+     * Sự kiện (concert/show) bên Catalog Service — đặt tên khác {@code eventId} của
+     * {@link BaseEvent} (đó là id của bản thân message Kafka).
+     */
     private UUID catalogEventId;
 
     private List<TicketClassQuantity> items;

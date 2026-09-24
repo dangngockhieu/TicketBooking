@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Mốc nghiệm thu GĐ3 (xem docs/development-plan.md): "50 luồng tranh nhau mua
+ * Nghiệm thu "50 luồng tranh nhau mua
  * 10 vé cuối cùng -> chỉ đúng 10 luồng thành công, 40 luồng bị từ chối".
  * <p>
  * Dùng Redis THẬT qua Testcontainers (không mock) để chứng minh Lua script

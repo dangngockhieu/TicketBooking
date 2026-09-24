@@ -14,7 +14,6 @@ import java.util.UUID;
 /**
  * Gọi sang User Service qua Eureka (load-balanced RestClient) để lấy snapshot
  * tài khoản ngân hàng đã xác minh khi tạo PayoutRequest (xem
- * docs/development-plan.md GĐ4 mục 4).
  */
 @Component
 public class UserClient {
@@ -27,7 +26,10 @@ public class UserClient {
         this.restClient = restClientBuilder.baseUrl("http://" + userServiceName).build();
     }
 
-    /** Yêu cầu rút tiền thủ công (§7.4) — có JWT của chính Organizer để forward, service tự verify quyền. */
+    /**
+     * Yêu cầu rút tiền thủ công (§7.4) — có JWT của chính Organizer để forward,
+     * service tự verify quyền.
+     */
     public BankAccountDto getMyBankAccount(String bearerToken) {
         ApiResponse<BankAccountDto> response = restClient.get()
                 .uri("/api/organizer/bank-account")
@@ -38,7 +40,10 @@ public class UserClient {
         return response != null ? response.getData() : null;
     }
 
-    /** Payout tự động (§7.5) — job nền không có JWT, gọi endpoint nội bộ (xem InternalOrganizerBankAccountController). */
+    /**
+     * Payout tự động (§7.5) — job nền không có JWT, gọi endpoint nội bộ (xem
+     * InternalOrganizerBankAccountController).
+     */
     public BankAccountDto getBankAccountByOrganizerId(UUID organizerId) {
         ApiResponse<BankAccountDto> response = restClient.get()
                 .uri("/api/internal/organizers/{id}/bank-account", organizerId)

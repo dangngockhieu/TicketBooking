@@ -7,7 +7,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Consumer Saga Compensation (xem docs/api-design.md §5.4, docs/development-plan.md
+ * Consumer Saga Compensation (xem docs/api-design.md §5.4
  * GĐ4 mục 3) — lắng nghe {@code booking.refund-requested} do Booking Service
  * bắn khi khách đã bị trừ tiền nhưng không thể hoàn tất sinh vé.
  */

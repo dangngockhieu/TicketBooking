@@ -50,7 +50,7 @@ Customer                    Auth Service                   Redis                
 | Đăng nhập khi `PENDING` | Bị chặn, trả `403 ACCOUNT_LOCKED (2003)` — xem ghi chú ở `api-design.md` §1 |
 | Tài khoản không xác thực sau X ngày | Đề xuất job dọn dẹp định kỳ xóa account `PENDING` quá 7 ngày (chưa cài đặt) |
 
-### 0.4. Việc cần làm để hoàn thiện (theo dõi ở `development-plan.md`)
+### 0.4. Việc cần làm để hoàn thiện
 
 1. **auth-service**: thêm dependency `spring-boot-starter-data-redis`, `RedisTemplate<String,String>`, sinh/verify OTP, 2 endpoint mới (`/auth/verify-email`, `/auth/resend-verification`).
 2. **auth-service**: sửa `AuthServiceImpl.register()` — bỏ `.status(AccountStatus.ACTIVE)`, dùng mặc định `PENDING` từ entity.

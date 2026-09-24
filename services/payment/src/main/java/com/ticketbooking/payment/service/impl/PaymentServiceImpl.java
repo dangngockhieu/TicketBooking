@@ -44,8 +44,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     private static final String STATUS_PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final String STATUS_PAID = "PAID";
-    private static final List<TransactionStatus> ACTIVE_TRANSACTION_STATUSES =
-            List.of(TransactionStatus.PENDING, TransactionStatus.SUCCESS);
+    private static final List<TransactionStatus> ACTIVE_TRANSACTION_STATUSES = List.of(TransactionStatus.PENDING,
+            TransactionStatus.SUCCESS);
 
     private final TransactionRepository transactionRepository;
     private final BookingClient bookingClient;
@@ -218,9 +218,11 @@ public class PaymentServiceImpl implements PaymentService {
         String description = "Hoàn tiền đơn hàng " + event.getBookingId()
                 + (event.getReason() != null ? ": " + event.getReason() : "");
 
-        MomoRefundResponse response = momoClient.refund(transaction.getBookingId(), transaction.getAmount(), transId, description);
+        MomoRefundResponse response = momoClient.refund(transaction.getBookingId(), transaction.getAmount(), transId,
+                description);
         if (!response.isSuccess()) {
-            log.error("MoMo từ chối hoàn tiền giao dịch {} (transId={}): resultCode={}, message={} — cần xử lý thủ công.",
+            log.error(
+                    "MoMo từ chối hoàn tiền giao dịch {} (transId={}): resultCode={}, message={} — cần xử lý thủ công.",
                     transaction.getId(), transId, response.resultCode(), response.message());
             return;
         }
@@ -240,7 +242,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     /**
      * Cộng tiền vào ví Organizer sau khi trừ phí nền tảng (xem
-     * docs/development-plan.md GĐ4 mục 4). Best-effort: nếu thiếu snapshot
+     * Best-effort: nếu thiếu snapshot
      * eventId/quantity (giao dịch cũ trước khi có cột này) hoặc Catalog
      * Service không phản hồi, chỉ log lỗi — KHÔNG chặn luồng IPN chính (khách
      * đã thanh toán thành công, không thể rollback vì lỗi ở bước phụ này).

@@ -17,7 +17,6 @@ import java.util.UUID;
  * Đánh dấu một {@code bookingId} đã được xử lý cho Kafka topic
  * {@code tickets.generated} — dùng làm chốt chặn idempotent consumer, chống
  * trừ vĩnh viễn {@code available_quantity} 2 lần khi Kafka redeliver message
- * (xem docs/development-plan.md GĐ4 bảng rủi ro).
  */
 @Entity
 @Table(name = "processed_ticket_events")

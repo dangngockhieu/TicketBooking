@@ -15,7 +15,6 @@ import java.util.UUID;
 /**
  * Gọi sang Catalog Service qua Eureka (load-balanced RestClient) để lấy
  * commission_rate/flat_fee_per_ticket khi tính tiền vào ví Organizer (xem
- * docs/development-plan.md GĐ4 mục 4).
  */
 @Component
 public class CatalogClient {

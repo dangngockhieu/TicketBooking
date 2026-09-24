@@ -7,7 +7,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Consumer Kafka Choreography (xem docs/development-plan.md GĐ4 mục 2) —
+ * Consumer Kafka Choreography —
  * lắng nghe {@code payment.success} do Payment Service bắn sau khi xác nhận
  * IPN từ MoMo, xác nhận booking sang PAID/ISSUED.
  */

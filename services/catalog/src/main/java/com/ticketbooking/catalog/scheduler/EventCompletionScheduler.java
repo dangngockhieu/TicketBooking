@@ -6,8 +6,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Chuyển PUBLISHED -> COMPLETED khi sự kiện đã qua endTime — điều kiện để
- * Payment Service tạo payout tự động 7 ngày sau (xem
- * docs/development-plan.md GĐ4 mục 4). Chạy mỗi giờ.
+ * Payment Service tạo payout tự động 7 ngày sau.
  */
 @Component
 public class EventCompletionScheduler {

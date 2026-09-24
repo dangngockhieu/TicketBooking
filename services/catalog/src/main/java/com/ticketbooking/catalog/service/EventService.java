@@ -13,7 +13,10 @@ import java.util.UUID;
 
 public interface EventService {
 
-    /** Tìm kiếm công khai — luôn chỉ trả sự kiện PUBLISHED (xem EventSpecifications). */
+    /**
+     * Tìm kiếm công khai — luôn chỉ trả sự kiện PUBLISHED (xem
+     * EventSpecifications).
+     */
     PageResponse<EventResponse> search(EventSearchFilter filter, Pageable pageable);
 
     /** Chi tiết công khai — luôn chỉ trả sự kiện PUBLISHED. */
@@ -27,21 +30,19 @@ public interface EventService {
 
     /**
      * Admin sửa {@code commissionRate}/{@code flatFeePerTicket} riêng cho một
-     * sự kiện (xem docs/development-plan.md GĐ4 mục 4).
      */
     EventResponse updateFees(UUID eventId, EventFeeUpdateRequest request);
 
     /**
      * Trừ vĩnh viễn {@code available_quantity} sau khi Booking Service xác
      * nhận thanh toán thành công (Kafka consumer {@code tickets.generated},
-     * xem docs/development-plan.md GĐ4 mục 2) và invalidate cache liên quan.
      */
     void reduceAvailableQuantity(UUID eventId, UUID ticketClassId, int quantity);
 
     /**
      * Xử lý toàn bộ {@code tickets.generated} cho một booking — idempotent:
      * nếu {@code bookingId} đã được xử lý trước đó (Kafka redeliver message),
-     * bỏ qua toàn bộ để tránh trừ kho 2 lần (xem docs/development-plan.md GĐ4
+     * bỏ qua toàn bộ để tránh trừ kho 2 lần
      * bảng rủi ro "Event trùng lặp").
      */
     void processTicketsGenerated(TicketsGeneratedEvent event);
@@ -49,7 +50,7 @@ public interface EventService {
     /**
      * Chuyển các sự kiện PUBLISHED đã qua {@code endTime} sang COMPLETED — dùng
      * bởi {@code EventCompletionScheduler}, kích hoạt payout tự động phía
-     * Payment Service 7 ngày sau (xem docs/development-plan.md GĐ4 mục 4).
+     * Payment Service 7 ngày sau.
      */
     void completeEndedEvents();
 }

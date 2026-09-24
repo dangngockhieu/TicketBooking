@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Kafka topic {@code payment.success} — xem docs/development-plan.md GĐ4 mục 2. */
+/** Kafka topic {@code payment.success} */
 @Getter
 @Setter
 @SuperBuilder

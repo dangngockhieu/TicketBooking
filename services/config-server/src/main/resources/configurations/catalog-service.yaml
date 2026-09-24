@@ -13,7 +13,7 @@ spring:
     driver-class-name: org.postgresql.Driver
 
   # Cấu hình kết nối Redis (Container redis :6379) — Cache Aside cho danh sách/chi
-  # tiết sự kiện (TTL 5-15 phút, xem docs/development-plan.md GĐ2 mục 3), và
+  # tiết sự kiện (TTL 5-15 phút), và
   # phân trang 1-based (page=1 là trang đầu) khớp đúng docs/api-design.md §3.2
   data:
     redis:
@@ -46,7 +46,7 @@ spring:
 
   # Apache Kafka (KRaft, container :9092) — Consumer: tickets.generated (Booking
   # Service bắn sau khi xác nhận thanh toán) -> trừ vĩnh viễn available_quantity
-  # và invalidate cache Redis (xem docs/development-plan.md GĐ4 mục 2).
+  # và invalidate cache Redis.
   kafka:
     bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}
     consumer:

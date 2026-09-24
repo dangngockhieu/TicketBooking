@@ -38,7 +38,7 @@ spring:
     locations: classpath:db/migration
 
   # Apache Kafka (KRaft, container :9092) — Producer: payment.success/payment.failed
-  # (xem docs/development-plan.md GĐ4 mục 2). Consumer group riêng cho payment-service
+  # Consumer group riêng cho payment-service
   # để lắng nghe booking.refund-requested (Saga compensation).
   kafka:
     bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}

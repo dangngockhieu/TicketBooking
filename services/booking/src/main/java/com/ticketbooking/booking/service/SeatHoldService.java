@@ -16,7 +16,7 @@ import java.util.UUID;
 
 /**
  * Atomic Seat Hold (xem docs/database-schema.md §4 "Redis Keys",
- * docs/development-plan.md GĐ3 mục 1) — chống overbooking bằng Redis Lua
+ * chống overbooking bằng Redis Lua
  * script check-and-increment thay vì lock ở tầng ứng dụng.
  */
 @Slf4j
@@ -72,11 +72,14 @@ public class SeatHoldService {
     /**
      * Ghi key {@code seat_hold:*} làm safety-net — Redis Keyspace Notification
      * bắt sự kiện {@code expired} của key này để kích hoạt nhả ghế sớm, song
-     * song với Scheduled Job quét {@code bookings.expired_at} (xem BookingExpirationScheduler).
+     * song với Scheduled Job quét {@code bookings.expired_at} (xem
+     * BookingExpirationScheduler).
      */
-    public void markHeld(UUID eventId, UUID ticketClassId, UUID customerId, UUID bookingId, int quantity, Duration ttl) {
+    public void markHeld(UUID eventId, UUID ticketClassId, UUID customerId, UUID bookingId, int quantity,
+            Duration ttl) {
         try {
-            String value = objectMapper.writeValueAsString(Map.of("bookingId", bookingId.toString(), "quantity", quantity));
+            String value = objectMapper
+                    .writeValueAsString(Map.of("bookingId", bookingId.toString(), "quantity", quantity));
             redisTemplate.opsForValue().set(seatHoldKey(eventId, ticketClassId, customerId), value, ttl);
         } catch (Exception e) {
             log.warn("Không thể ghi seat_hold key cho booking {}: {}", bookingId, e.getMessage());

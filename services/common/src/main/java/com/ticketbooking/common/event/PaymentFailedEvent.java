@@ -8,7 +8,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.util.UUID;
 
-/** Kafka topic {@code payment.failed} — xem docs/development-plan.md GĐ4 mục 2. */
+/** Kafka topic {@code payment.failed} */
 @Getter
 @Setter
 @SuperBuilder

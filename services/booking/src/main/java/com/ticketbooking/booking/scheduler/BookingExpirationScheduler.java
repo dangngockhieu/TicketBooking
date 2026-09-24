@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Nguồn nhả ghế đáng tin cậy nhất (xem docs/development-plan.md GĐ3 mục 3) —
+ * Nguồn nhả ghế đáng tin cậy nhất —
  * quét trực tiếp Postgres nên không phụ thuộc vào Redis keyspace notification
  * (best-effort, có thể bị bỏ lỡ nếu Redis khởi động lại). Chạy mỗi phút.
  */

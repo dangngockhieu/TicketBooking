@@ -19,7 +19,9 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     /** Idempotency khi khởi tạo thanh toán (xem docs/api-design.md §5.1). */
     boolean existsByBookingIdAndStatusIn(UUID bookingId, Collection<TransactionStatus> statuses);
 
-    /** Dùng bởi PayoutAutoCreationScheduler để duyệt qua từng sự kiện có doanh thu (xem docs/development-plan.md GĐ4 mục 4). */
+    /**
+     * Dùng bởi PayoutAutoCreationScheduler để duyệt qua từng sự kiện có doanh thu.
+     */
     @Query("select distinct t.eventId from Transaction t where t.status = com.ticketbooking.payment.enums.TransactionStatus.SUCCESS and t.eventId is not null")
     List<UUID> findDistinctEventIdsWithSuccessfulPayment();
 

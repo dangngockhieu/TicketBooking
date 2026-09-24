@@ -23,11 +23,14 @@ public interface PayoutService {
 
     PageResponse<PayoutResponse> listMine(UUID organizerId, PayoutStatus status, Pageable pageable);
 
-    /** ADMIN duyệt/từ chối/tạm giữ/chi trả — PAID kích hoạt gọi MoMo Disbursement API (§7.5). */
+    /**
+     * ADMIN duyệt/từ chối/tạm giữ/chi trả — PAID kích hoạt gọi MoMo Disbursement
+     * API (§7.5).
+     */
     PayoutResponse updateStatus(UUID payoutId, UpdatePayoutStatusRequest request);
 
     /**
-     * Job nền hàng ngày (xem docs/development-plan.md GĐ4 mục 4) — với mỗi sự
+     * Job nền hàng ngày - với mỗi sự
      * kiện đã COMPLETED đủ 7 ngày và chưa có payout AUTO, tạo PayoutRequest
      * bằng netRevenue của sự kiện đó, reserve từ availableBalance sang
      * pendingPayout.

@@ -16,7 +16,7 @@ import java.util.UUID;
  * xem docs/system-design.md §9 "api-gateway là điểm vào duy nhất từ bên
  * ngoài") — dùng bởi Payment Service để lấy snapshot tài khoản ngân hàng đã
  * xác minh khi tạo PayoutRequest tự động (job nền không có JWT của Organizer
- * để forward, khác với luồng rút tiền thủ công — xem docs/development-plan.md
+ * để forward, khác với luồng rút tiền thủ công
  * GĐ4 mục 4). KHÔNG permitAll ở tầng Gateway vì route này không được khai báo
  * ở đó; permitAll ở tầng Spring Security của chính service này vì lời gọi chỉ
  * đến từ mạng nội bộ giữa các service.

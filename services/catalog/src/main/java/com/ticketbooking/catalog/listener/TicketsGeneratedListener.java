@@ -7,7 +7,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Consumer Kafka Choreography (xem docs/development-plan.md GĐ4 mục 2,
+ * Consumer Kafka Choreography,
  * Consumer 2) — lắng nghe {@code tickets.generated} do Booking Service bắn
  * sau khi xác nhận thanh toán, trừ vĩnh viễn {@code available_quantity}.
  */

@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Job nền hàng ngày tạo payout tự động cho các sự kiện đã COMPLETED đủ 7 ngày
- * (xem docs/development-plan.md GĐ4 mục 4, docs/api-design.md §7.5).
+ * (xem docs/api-design.md §7.5).
  */
 @Component
 public class PayoutAutoCreationScheduler {
