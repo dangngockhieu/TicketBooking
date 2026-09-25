@@ -15,6 +15,8 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CatalogEventDto(
         UUID id,
+        UUID organizerId,
+        String title,
         String status,
         Instant saleStartTime,
         Instant saleEndTime,
@@ -26,6 +28,7 @@ public record CatalogEventDto(
             UUID id,
             String name,
             BigDecimal price,
+            Integer totalQuantity,
             Integer availableQuantity
     ) {
     }

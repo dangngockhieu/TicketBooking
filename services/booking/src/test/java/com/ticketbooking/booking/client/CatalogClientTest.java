@@ -30,8 +30,9 @@ class CatalogClientTest {
     void getEvent_returnsDeserializedData() throws Exception {
         UUID eventId = UUID.randomUUID();
         CatalogEventDto dto = new CatalogEventDto(
-                eventId, "PUBLISHED", Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600),
-                List.of(new CatalogEventDto.TicketClassDto(UUID.randomUUID(), "VIP", new BigDecimal("1500000"), 200)));
+                eventId, UUID.randomUUID(), "Concert ABC", "PUBLISHED",
+                Instant.now().minusSeconds(3600), Instant.now().plusSeconds(3600),
+                List.of(new CatalogEventDto.TicketClassDto(UUID.randomUUID(), "VIP", new BigDecimal("1500000"), 200, 200)));
         String body = objectMapper.writeValueAsString(ApiResponse.success(dto));
 
         RestClient.Builder builder = RestClient.builder();
