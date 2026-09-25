@@ -10,6 +10,7 @@ import com.ticketbooking.user.service.ProfileService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -48,6 +49,12 @@ public class ProfileServiceImpl implements ProfileService {
         Profile saved = profileRepository.save(profile);
 
         return toResponse(saved, email, role);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> findFullName(UUID accountId) {
+        return profileRepository.findByAccountId(accountId).map(Profile::getFullName);
     }
 
     /**
