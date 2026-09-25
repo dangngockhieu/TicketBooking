@@ -13,9 +13,10 @@ import org.springframework.web.client.RestClient;
 import java.util.UUID;
 
 /**
- * Gọi sang Catalog Service qua Eureka (load-balanced RestClient, KHÔNG hard-code
+ * Gọi sang Catalog Service qua Eureka (load-balanced RestClient, KHÔNG
+ * hard-code
  * host:port) để lấy thông tin sự kiện/hạng vé còn hiệu lực tại thời điểm đặt vé
- * (giá, số vé còn lại, cửa sổ mở bán) — xem docs/development-plan.md GĐ3.
+ * (giá, số vé còn lại, cửa sổ mở bán).
  */
 @Component
 public class CatalogClient {
