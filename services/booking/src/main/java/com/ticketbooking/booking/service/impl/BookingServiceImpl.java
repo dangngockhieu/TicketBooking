@@ -2,17 +2,23 @@ package com.ticketbooking.booking.service.impl;
 
 import com.ticketbooking.booking.client.CatalogClient;
 import com.ticketbooking.booking.client.QueueClient;
+import com.ticketbooking.booking.client.UserClient;
 import com.ticketbooking.booking.client.dto.CatalogEventDto;
 import com.ticketbooking.booking.client.dto.QueueAccessDto;
 import com.ticketbooking.booking.dto.request.BookingItemRequest;
+import com.ticketbooking.booking.dto.request.CheckInRequest;
 import com.ticketbooking.booking.dto.request.CreateBookingRequest;
 import com.ticketbooking.booking.dto.response.BookingResponse;
+import com.ticketbooking.booking.dto.response.CheckInResponse;
+import com.ticketbooking.booking.dto.response.EventReportResponse;
+import com.ticketbooking.booking.dto.response.TicketClassReportRow;
 import com.ticketbooking.booking.entity.Booking;
 import com.ticketbooking.booking.entity.Ticket;
 import com.ticketbooking.booking.enums.BookingStatus;
 import com.ticketbooking.booking.enums.TicketStatus;
 import com.ticketbooking.booking.event.BookingEventPublisher;
 import com.ticketbooking.booking.repository.BookingRepository;
+import com.ticketbooking.booking.repository.TicketRepository;
 import com.ticketbooking.booking.service.BookingService;
 import com.ticketbooking.booking.service.SeatHoldService;
 import com.ticketbooking.common.dto.PageResponse;
@@ -36,6 +42,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -43,22 +50,28 @@ import java.util.UUID;
 public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
+    private final TicketRepository ticketRepository;
     private final CatalogClient catalogClient;
     private final QueueClient queueClient;
+    private final UserClient userClient;
     private final SeatHoldService seatHoldService;
     private final BookingEventPublisher eventPublisher;
     private final long holdTtlSeconds;
 
     public BookingServiceImpl(
             BookingRepository bookingRepository,
+            TicketRepository ticketRepository,
             CatalogClient catalogClient,
             QueueClient queueClient,
+            UserClient userClient,
             SeatHoldService seatHoldService,
             BookingEventPublisher eventPublisher,
             @Value("${booking.hold.ttl-seconds:600}") long holdTtlSeconds) {
         this.bookingRepository = bookingRepository;
+        this.ticketRepository = ticketRepository;
         this.catalogClient = catalogClient;
         this.queueClient = queueClient;
+        this.userClient = userClient;
         this.seatHoldService = seatHoldService;
         this.eventPublisher = eventPublisher;
         this.holdTtlSeconds = holdTtlSeconds;
@@ -218,6 +231,79 @@ public class BookingServiceImpl implements BookingService {
             releaseSeatHold(booking, quantityByTicketClass);
         }
         bookingRepository.save(booking);
+    }
+
+    @Override
+    public CheckInResponse checkIn(UUID organizerId, CheckInRequest request) {
+        Ticket ticket = ticketRepository.findByQrCodeData(request.qrCodeData())
+                .orElseThrow(() -> new ResourceNotFoundException("Mã QR không hợp lệ."));
+        Booking booking = ticket.getBooking();
+
+        CatalogEventDto event = catalogClient.getEvent(booking.getEventId());
+        if (!event.organizerId().equals(organizerId)) {
+            throw new ForbiddenException("Vé này không thuộc sự kiện của bạn.");
+        }
+
+        if (ticket.getStatus() == TicketStatus.CHECKED_IN) {
+            throw new ConflictException("Vé đã được check-in trước đó.");
+        }
+        if (ticket.getStatus() != TicketStatus.ISSUED) {
+            throw new ConflictException("Vé chưa được phát hành (chưa thanh toán).");
+        }
+
+        Instant checkedInAt = Instant.now();
+        int affected = ticketRepository.checkInIfIssued(ticket.getId(), checkedInAt);
+        if (affected == 0) {
+            // Quét trùng gần như đồng thời (race hiếm) — nhánh khác đã thắng giữa lúc đọc và ghi ở trên.
+            throw new ConflictException("Vé đã được check-in trước đó.");
+        }
+
+        String customerName = userClient.findFullName(booking.getCustomerId());
+        return new CheckInResponse(ticket.getId(), ticket.getTicketClassName(), event.title(), customerName,
+                TicketStatus.CHECKED_IN.name(), checkedInAt);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EventReportResponse getEventReport(UUID eventId, UUID organizerId) {
+        CatalogEventDto event = catalogClient.getEvent(eventId);
+        if (organizerId != null && !event.organizerId().equals(organizerId)) {
+            throw new ForbiddenException("Sự kiện này không thuộc quyền quản lý của bạn.");
+        }
+
+        Map<UUID, TicketClassReportRow> soldByClass = ticketRepository.aggregateSoldByTicketClass(eventId).stream()
+                .collect(Collectors.toMap(TicketClassReportRow::ticketClassId, row -> row));
+
+        List<EventReportResponse.TicketClassReport> classReports = event.ticketClasses().stream()
+                .map(tc -> buildTicketClassReport(tc, soldByClass.get(tc.id())))
+                .toList();
+
+        BigDecimal totalRevenue = classReports.stream()
+                .map(EventReportResponse.TicketClassReport::revenue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long totalSold = classReports.stream().mapToLong(EventReportResponse.TicketClassReport::sold).sum();
+        long totalCapacity = classReports.stream().mapToLong(EventReportResponse.TicketClassReport::totalQuantity).sum();
+        long totalCheckedIn = classReports.stream().mapToLong(EventReportResponse.TicketClassReport::checkedIn).sum();
+
+        return new EventReportResponse(
+                eventId, event.title(), totalRevenue, totalSold, totalCapacity,
+                rate(totalSold, totalCapacity), totalCheckedIn, rate(totalCheckedIn, totalSold),
+                classReports);
+    }
+
+    private EventReportResponse.TicketClassReport buildTicketClassReport(
+            CatalogEventDto.TicketClassDto ticketClass, TicketClassReportRow row) {
+        long totalQuantity = ticketClass.totalQuantity() != null ? ticketClass.totalQuantity() : 0L;
+        long sold = row != null ? row.soldCount() : 0L;
+        long checkedIn = row != null ? row.checkedInCount() : 0L;
+        BigDecimal revenue = row != null ? row.revenue() : BigDecimal.ZERO;
+        return new EventReportResponse.TicketClassReport(
+                ticketClass.id(), ticketClass.name(), totalQuantity, sold, checkedIn, revenue,
+                rate(sold, totalQuantity), rate(checkedIn, sold));
+    }
+
+    private static double rate(long numerator, long denominator) {
+        return denominator > 0 ? (double) numerator / denominator : 0d;
     }
 
     private void requestRefund(UUID bookingId, UUID transactionId, BigDecimal amount, String gatewayTransId, String reason) {

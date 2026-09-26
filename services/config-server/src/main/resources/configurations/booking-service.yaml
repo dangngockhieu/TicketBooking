@@ -46,8 +46,7 @@ spring:
 
   # Apache Kafka (KRaft, container :9092) — Consumer: payment.success (xác nhận
   # thanh toán -> PAID/ISSUED -> bắn tiếp tickets.generated). Producer:
-  # tickets.generated cho Catalog/Notification Service (xem
-  # docs/development-plan.md GĐ4 mục 2).
+  # tickets.generated cho Catalog/Notification Service
   kafka:
     bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}
     producer:

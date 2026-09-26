@@ -1,7 +1,10 @@
 package com.ticketbooking.booking.service;
 
+import com.ticketbooking.booking.dto.request.CheckInRequest;
 import com.ticketbooking.booking.dto.request.CreateBookingRequest;
 import com.ticketbooking.booking.dto.response.BookingResponse;
+import com.ticketbooking.booking.dto.response.CheckInResponse;
+import com.ticketbooking.booking.dto.response.EventReportResponse;
 import com.ticketbooking.booking.enums.BookingStatus;
 import com.ticketbooking.common.dto.PageResponse;
 import org.springframework.data.domain.Pageable;
@@ -31,7 +34,7 @@ public interface BookingService {
 
     /**
      * Xác nhận thanh toán thành công (Kafka consumer {@code payment.success},
-     * xem docs/development-plan.md GĐ4 mục 2) — chuyển booking sang PAID, vé
+     * chuyển booking sang PAID, vé
      * sang ISSUED, trả lại Redis seat hold, rồi bắn tiếp {@code tickets.generated}.
      * <p>
      * Nếu không thể hoàn tất (booking không tồn tại, đã bị auto-release do hết
@@ -41,7 +44,8 @@ public interface BookingService {
      * No-op (không refund) nếu booking đã được xử lý bởi lần redeliver trước
      * (đã PAID/REFUNDED).
      *
-     * @param transactionId  giao dịch MoMo tương ứng — cần để build refund request nếu phải compensate
+     * @param transactionId  giao dịch MoMo tương ứng — cần để build refund request
+     *                       nếu phải compensate
      * @param amount         số tiền đã thanh toán — cần để build refund request
      * @param gatewayTransId transId gốc bên MoMo — cần để build refund request
      */
@@ -55,4 +59,22 @@ public interface BookingService {
      * nếu booking không tồn tại hoặc đã REFUNDED (idempotent).
      */
     void markRefunded(UUID bookingId);
+
+    /**
+     * Check-in vé bằng QR tại cổng sự kiện (xem docs/api-design.md §4.5,
+     * docs/technical-flows.md §5.2) — chỉ Organizer sở hữu sự kiện của vé mới
+     * được quét. Ném {@code ResourceNotFoundException} nếu QR không hợp lệ,
+     * {@code ForbiddenException} nếu vé không thuộc sự kiện của organizer,
+     * {@code ConflictException} nếu vé chưa ISSUED hoặc đã CHECKED_IN trước đó.
+     */
+    CheckInResponse checkIn(UUID organizerId, CheckInRequest request);
+
+    /**
+     * Báo cáo doanh thu/tỷ lệ lấp đầy/tỷ lệ check-in cho một sự kiện (xem
+     * {@code organizerId} là
+     * {@code null} khi gọi từ route Admin (bỏ qua kiểm tra quyền sở hữu);
+     * khác {@code null} khi gọi từ route Organizer (ném
+     * {@code ForbiddenException} nếu không sở hữu sự kiện).
+     */
+    EventReportResponse getEventReport(UUID eventId, UUID organizerId);
 }
