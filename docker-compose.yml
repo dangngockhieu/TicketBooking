@@ -219,6 +219,43 @@ services:
     networks:
       - ticketbooking-network
 
+  # ==============================================================================
+  # 10. PROMETHEUS (Thu thập metrics từ /actuator/prometheus của từng service)
+  # ==============================================================================
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: ticketbooking-prometheus
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 11. GRAFANA (Dashboard RPS, latency, JVM Memory, Kafka lag — xem
+  # ==============================================================================
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: ticketbooking-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - ticketbooking-network
+
 # ==============================================================================
 # VOLUMES (Lưu trữ dữ liệu độc lập cho từng Container)
 # ==============================================================================
@@ -238,6 +275,10 @@ volumes:
   kafka_data:
     driver: local
   mongo_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 # ==============================================================================
