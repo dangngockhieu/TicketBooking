@@ -34,6 +34,8 @@ public class SecurityConfig {
                                 .authorizeHttpRequests(authz -> authz
                                                 .requestMatchers("/actuator/**")
                                                 .permitAll()
+                                                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                                                .permitAll()
                                                 .anyRequest().authenticated())
                                 .oauth2ResourceServer(oauth2 -> oauth2
                                                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))

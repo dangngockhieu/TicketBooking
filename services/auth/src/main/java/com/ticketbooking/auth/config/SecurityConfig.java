@@ -56,7 +56,10 @@ public class SecurityConfig {
                                                                 "/api/auth/forgot-password",
                                                                 "/api/auth/reset-password",
                                                                 "/.well-known/jwks.json",
-                                                                "/actuator/**")
+                                                                "/actuator/**",
+                                                                "/v3/api-docs/**",
+                                                                "/swagger-ui/**",
+                                                                "/swagger-ui.html")
                                                 .permitAll()
                                                 .anyRequest().authenticated())
                                 .oauth2ResourceServer(oauth2 -> oauth2
