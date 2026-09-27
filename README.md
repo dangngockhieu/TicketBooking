@@ -1,4 +1,4 @@
-﻿# 🎫 TicketBooking
+# 🎫 TicketBooking
 
 > **Hệ thống Đặt vé Sự kiện phân tán — Distributed Event Ticketing System**
 
@@ -174,18 +174,24 @@ TicketBooking/
 │   ├── technical-flows.md          #    Luồng kỹ thuật (Seat hold, Payment, Saga)
 │   ├── architecture-diagrams.md    #    Sơ đồ kiến trúc Mermaid
 │   └── virtual-waiting-room.md     #    Thiết kế chi tiết phòng chờ ảo
-├── services/                       # 🔧 Mã nguồn các Microservices (theo plan)
+├── k6/                             # 🧪 Kịch bản kiểm thử chịu tải cao k6
+│   ├── burst-booking-race-condition.js # Kịch bản Flash sale 2.000 VUs tranh chấp vé
+│   ├── virtual-waiting-room-test.js    # Kịch bản kiểm thử phòng chờ ảo WebSocket
+│   ├── catalog-browse-test.js          # Kịch bản kiểm thử đọc tải cao kèm Cache
+│   └── README.md                       # Hướng dẫn chi tiết chạy k6
+├── services/                       # 🔧 Mã nguồn các Microservices (Multi-stage Dockerfile)
 │   ├── api-gateway/                #    API Gateway (Port 8080)
 │   ├── auth-service/               #    Xác thực & Phân quyền (Port 8081)
 │   ├── user-service/               #    Hồ sơ người dùng (Port 8082)
 │   ├── catalog-service/            #    Danh mục & Sự kiện (Port 8083)
 │   ├── booking-service/            #    Đặt vé & Giữ chỗ Core (Port 8084)
-│   ├── payment-service/            #    Thanh toán VNPay (Port 8085)
+│   ├── payment-service/            #    Thanh toán MoMo (Port 8085)
 │   ├── notification-service/       #    Thông báo & Email QR (Port 8086)
 │   ├── queue-service/              #    Phòng chờ ảo WebSocket (Port 8087)
 │   └── recommend-service/          #    AI Gợi ý sự kiện - Python/FastAPI (Port 8088)
 │
-├── docker-compose.yml              # 🚀 File docker-compose khởi chạy toàn bộ hạ tầng
+├── docker-compose.yml              # 🚀 File docker-compose khởi chạy hạ tầng (Dev)
+├── docker-compose.prod.yml         # 🏭 File docker-compose Full Stack (Infra + Microservices)
 ├── .env.example                    # 📋 Template biến môi trường mẫu
 ├── .env                            # 🔒 File biến môi trường thực tế (Git ignore)
 ├── .gitignore
@@ -208,9 +214,15 @@ cp .env.example .env
 ```
 *(Bạn có thể mở file `.env` để tùy chỉnh mật khẩu Database, Redis, Kafka theo ý muốn).*
 
-### Bước 2: Khởi chạy toàn bộ hạ tầng (Infrastructure)
+### Bước 2: Khởi chạy hạ tầng (Development Mode)
 ```bash
 docker compose up -d
+```
+
+### Bước 3: Khởi chạy toàn bộ hệ thống (Production Full-Stack Mode)
+Nếu muốn build và chạy đồng thời cả Hạ tầng lẫn toàn bộ 9 Backend Microservices:
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
 ```
 
 Kiểm tra trạng thái các container:
@@ -218,10 +230,12 @@ Kiểm tra trạng thái các container:
 docker compose ps
 ```
 
-### Bước 3: Truy cập các cổng dịch vụ hạ tầng
+### Bước 4: Truy cập các cổng dịch vụ hạ tầng
 
 | Dịch vụ | Địa chỉ Host | Database / User / Password (trong `.env`) |
 | :--- | :--- | :--- |
+| **API Gateway** | [http://localhost:8080](http://localhost:8080) | Cổng truy cập duy nhất cho Client |
+| **Eureka Discovery** | [http://localhost:8761](http://localhost:8761) | Dashboard quản lý trạng thái các services |
 | **PostgreSQL - Auth** | `localhost:5433` | DB: `auth_db` \| User: `auth_user` \| Pass: `auth_pass_2026` |
 | **PostgreSQL - User** | `localhost:5434` | DB: `user_db` \| User: `user_svc_user` \| Pass: `user_svc_pass_2026` |
 | **PostgreSQL - Catalog** | `localhost:5435` | DB: `catalog_db` \| User: `catalog_user` \| Pass: `catalog_pass_2026` |
@@ -231,11 +245,29 @@ docker compose ps
 | **Kafka Broker** | `localhost:9092` | PLAINTEXT |
 | **Kafka UI Dashboard** | [http://localhost:8090](http://localhost:8090) | `admin` / `admin_kafka_2026` |
 | **MongoDB** | `localhost:27017` | `mongo_admin` / `mongo_secure_pass_2026` |
+| **Prometheus** | [http://localhost:9090](http://localhost:9090) | Metrics Scraper |
+| **Grafana Dashboard** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin_grafana_2026` |
 
-Dừng toàn bộ hạ tầng:
+Dừng toàn bộ hệ thống:
 ```bash
 docker compose down
+# Hoặc đối với production:
+docker compose -f docker-compose.prod.yml down
 ```
+
+---
+
+## 🧪 Kiểm thử chịu tải (Load Testing with k6)
+
+Hệ thống được kiểm thử bằng k6 với kịch bản Flash Sale 2.000 VUs tranh chấp vé đồng thời:
+```bash
+# Chạy kịch bản Flash Sale tranh chấp mua vé:
+k6 run k6/burst-booking-race-condition.js
+
+# Chạy kịch bản kiểm thử phòng chờ ảo:
+k6 run k6/virtual-waiting-room-test.js
+```
+👉 Xem chi tiết tại [k6/README.md](k6/README.md) và kết quả nghiệm thu tại [Load Testing Report](docs/load-testing-report.md).
 
 ---
 
@@ -249,6 +281,8 @@ docker compose down
 | [⚡ Technical Flows](docs/technical-flows.md) | Luồng Atomic Seat Hold, Kafka Event Choreography, Saga Rollback |
 | [📊 Architecture Diagrams](docs/architecture-diagrams.md) | 7 sơ đồ Mermaid (System, Sequence, ER, State Machine, Deployment) |
 | [🚦 Virtual Waiting Room](docs/virtual-waiting-room.md) | Cơ chế phòng chờ ảo, WebSocket STOMP, Heartbeat, Auto-enable |
+| [🧪 Load Testing Report](docs/load-testing-report.md) | Báo cáo kiểm thử chịu tải k6 (2.000 VUs), chứng minh 0% overbooking |
+| [🗺️ Development Plan](docs/development-plan.md) | Lộ trình và kết quả nghiệm thu 8 tuần (100% Completed) |
 
 ---
 
