@@ -87,6 +87,48 @@ spring:
           predicates:
             - Path=/ws/queue/**
 
+        # Swagger — proxy /v3/api-docs của từng service dưới /docs/<service>/
+        # để gateway tự aggregate vào 1 Swagger UI duy nhất (xem
+        # springdoc.swagger-ui.urls bên dưới). RewritePath bỏ tiền tố
+        # /docs/<service> trước khi forward, vì mỗi service chỉ phục vụ đúng
+        # 1 path /v3/api-docs.
+        - id: auth-service-api-docs
+          uri: lb://auth-service
+          predicates:
+            - Path=/docs/auth-service/v3/api-docs
+          filters:
+            - RewritePath=/docs/auth-service/v3/api-docs, /v3/api-docs
+        - id: user-service-api-docs
+          uri: lb://user-service
+          predicates:
+            - Path=/docs/user-service/v3/api-docs
+          filters:
+            - RewritePath=/docs/user-service/v3/api-docs, /v3/api-docs
+        - id: catalog-service-api-docs
+          uri: lb://catalog-service
+          predicates:
+            - Path=/docs/catalog-service/v3/api-docs
+          filters:
+            - RewritePath=/docs/catalog-service/v3/api-docs, /v3/api-docs
+        - id: booking-service-api-docs
+          uri: lb://booking-service
+          predicates:
+            - Path=/docs/booking-service/v3/api-docs
+          filters:
+            - RewritePath=/docs/booking-service/v3/api-docs, /v3/api-docs
+        - id: payment-service-api-docs
+          uri: lb://payment-service
+          predicates:
+            - Path=/docs/payment-service/v3/api-docs
+          filters:
+            - RewritePath=/docs/payment-service/v3/api-docs, /v3/api-docs
+        - id: queue-service-api-docs
+          uri: lb://queue-service
+          predicates:
+            - Path=/docs/queue-service/v3/api-docs
+          filters:
+            - RewritePath=/docs/queue-service/v3/api-docs, /v3/api-docs
+
   # §9.2 — JWT sơ bộ tại Gateway. Cùng jwk-set-uri với user-service: chỉ verify
   # bằng Public Key (Zero Trust), không giữ bí mật nào của auth-service.
   security:
@@ -94,3 +136,23 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: http://localhost:8081/.well-known/jwks.json
+
+# Gateway's own springdoc-webflux-ui — dropdown gộp cả 6 service (Swagger UI
+# mặc định tại /swagger-ui.html, "Try it out" gọi thẳng qua chính gateway
+# này nên JWT thật vẫn hoạt động bình thường). "springdoc" LUÔN là key gốc
+# (không nằm trong spring:), khác các mục còn lại ở file này.
+springdoc:
+  swagger-ui:
+    urls:
+      - name: auth-service
+        url: /docs/auth-service/v3/api-docs
+      - name: user-service
+        url: /docs/user-service/v3/api-docs
+      - name: catalog-service
+        url: /docs/catalog-service/v3/api-docs
+      - name: booking-service
+        url: /docs/booking-service/v3/api-docs
+      - name: payment-service
+        url: /docs/payment-service/v3/api-docs
+      - name: queue-service
+        url: /docs/queue-service/v3/api-docs
