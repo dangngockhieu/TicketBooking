@@ -1,0 +1,5 @@
+[
+  { "email": "queue-test-1@ticketbooking.local", "password": "ChangeMe123!" },
+  { "email": "queue-test-2@ticketbooking.local", "password": "ChangeMe123!" },
+  { "email": "queue-test-3@ticketbooking.local", "password": "ChangeMe123!" }
+]

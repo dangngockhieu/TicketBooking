@@ -68,6 +68,9 @@ Thumbs.db
 # Secret key material (RSA keypairs, etc.) — never commit real keys
 secrets/
 
+# k6 load-test credentials (real accounts/passwords) — chỉ commit bản .example.json
+k6/fixtures/queue-test-accounts.json
+
 # Docker
 docker-compose.override.yml
 
@@ -82,3 +85,4 @@ dump.rdb
 
 # Internal / Private Docs
 docs/development-plan.md
+docs/load-testing-report.md
