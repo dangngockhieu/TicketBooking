@@ -1,4 +1,4 @@
-﻿# 📐 Thiết Kế Hệ Thống — TicketBooking
+# 📐 Thiết Kế Hệ Thống — TicketBooking
 
 > Tài liệu thiết kế tổng quan cho Hệ thống Đặt vé Sự kiện phân tán (Distributed Event Ticketing System)
 
@@ -194,6 +194,7 @@ Tuân thủ nghiêm ngặt mô hình **Database per Service**:
                     └──────────────────────────────────────────────┘
 ```
 
+* **`auth.organizer-created`:** Auth Service bắn event khi Admin tạo tài khoản Organizer mới ➔ Notification Service nạp template Thymeleaf `organizer-welcome.html` và tự động gửi Gmail mật khẩu tạm qua Gmail SMTP.
 * **`payment.success`:** Payment Service bắn event sau khi nhận IPN thành công từ MoMo ➔ Booking Service cập nhật đơn `PAID` và vé `ISSUED`.
 * **`tickets.generated`:** Booking Service bắn event ➔ Catalog Service trừ vĩnh viễn `available_quantity`, Notification Service gửi email vé kèm mã QR.
 * **`booking.refund-requested` (Saga Rollback):** Nếu sau khi thanh toán mà Booking Service bị lỗi sinh vé ➔ Yêu cầu Payment Service tự động gọi MoMo Refund API hoàn tiền cho khách.

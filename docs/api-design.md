@@ -213,40 +213,52 @@ PUT /auth/change-password
 > Theo `system-design.md` §1.2 và §2.3 (UC-A1): Admin **thẩm định giấy phép tổ chức sự kiện ngoài hệ thống trước** (qua email/hồ sơ giấy), sau đó mới tạo tài khoản trong hệ thống — không có bước "duyệt đơn online" vì không có đơn nào được nộp online cả. Organizer **không tự đăng ký**.
 
 ```http
-POST /admin/organizers
+POST /api/admin/organizers
 ```
 
 **Request Body:**
 ```json
 {
-  "email": "bantochuc@abc.vn",
-  "fullName": "Công ty TNHH Sự kiện ABC"
+  "email": "organizer@eventpro.vn",
+  "fullName": "Công ty Cổ phần Sự kiện Pro Event"
 }
 ```
 
-**Response (201):**
+**Response (201 Created):**
 ```json
 {
-  "success": true,
+  "status": 0,
+  "message": "Đã tạo tài khoản Organizer.",
   "data": {
-    "id": "uuid",
-    "email": "bantochuc@abc.vn",
-    "role": "ORGANIZER",
-    "status": "ACTIVE"
-  }
+    "userInfo": {
+      "id": "7b8e21a0-5cb3-4899-b1d3-3f112e45a901",
+      "email": "organizer@eventpro.vn",
+      "role": "ORGANIZER",
+      "status": "ACTIVE"
+    },
+    "tempPassword": "P@ssw0rdRandom#2026"
+  },
+  "responseTime": 1727521200000
 }
 ```
 
-> - Tài khoản tạo ra **`status = ACTIVE` ngay** (không qua `PENDING`/OTP) — vì Admin đã xác minh danh tính ngoài luồng, không cần xác thực email lại.
-> - Mật khẩu: hệ thống tự sinh mật khẩu tạm ngẫu nhiên (không nhận `password` từ Admin để tránh Admin biết mật khẩu thật của Organizer).
-> - ⏳ Gửi mật khẩu tạm qua email cho Organizer: phụ thuộc Kafka/`notification-service` (chưa triển khai — xem mục 1.1). Tạm thời ở môi trường dev, response trả kèm `tempPassword` khi `spring.profiles.active=dev`, hoặc Admin lấy log server.
-> - Lần đăng nhập đầu tiên bằng mật khẩu tạm: response `AuthResponse` có thêm cờ `"requirePasswordChange": true` → FE bắt buộc chuyển tới `PUT /auth/change-password` trước khi cho vào các trang khác.
+> **Quy trình kích hoạt & Gửi Gmail tự động:**
+> 1. **Tài khoản kích hoạt ngay (`status: ACTIVE`):** Do Admin đã trực tiếp thẩm định pháp lý ngoại tuyến, tài khoản không qua trạng thái `PENDING` và không cần mã OTP.
+> 2. **Sinh mật khẩu tạm ngẫu nhiên:** Hệ thống tự sinh `tempPassword` bằng thuật toán an toàn `SecureRandom` (gồm chữ hoa, chữ thường, số, ký tự đặc biệt) và mã hóa BCrypt lưu vào PostgreSQL. Admin không tự gõ mật khẩu.
+> 3. **Tự động gửi Gmail chào mừng (Event-Driven):**
+>    * Auth Service bắn Kafka event `auth.organizer-created` (`OrganizerWelcomeEvent`).
+>    * `Notification Service` nhận event, render template Thymeleaf HTML chuẩn responsive [`organizer-welcome.html`](../services/notification/src/main/resources/templates/organizer-welcome.html).
+>    * Gửi thư tự động qua **Gmail SMTP Server (`smtp.gmail.com:587`)** với tiêu đề *"Tài khoản Organizer TicketBooking của bạn đã sẵn sàng"*, chứa mật khẩu tạm trong khối bảo mật và hướng dẫn đăng nhập.
+>    * Ghi log kết quả gửi vào MongoDB collection `email_logs` (`type: ORGANIZER_WELCOME`, `status: SENT`).
+> 4. **Dự phòng bàn giao:** `tempPassword` vẫn được trả về trong response cho Admin để đối chiếu hoặc bàn giao trực tiếp trong trường hợp hộp thư của Organizer chặn mail hoặc rơi vào mục Spam.
+> 5. **Bảo mật lần đầu đăng nhập:** Tài khoản được gắn cờ `requirePasswordChange: true`. Khi Organizer đăng nhập lần đầu bằng mật khẩu tạm (`POST /auth/login`), hệ thống trả cờ này trong `AuthResponse` và Frontend bắt buộc điều hướng người dùng tới API `PUT /auth/change-password` để thiết lập mật khẩu mới trước khi có thể truy cập dashboard quản lý.
 
 **Error Cases:**
 | Code | Error Code | Mô tả |
 |------|-----------|--------|
-| 409 | `EMAIL_ALREADY_EXISTS` | Email đã tồn tại tài khoản khác |
-| 400 | `INVALID_INPUT_DATA` | Thiếu email/fullName |
+| 400 | `INVALID_INPUT_DATA` | Thiếu email hoặc định dạng email không hợp lệ |
+| 409 | `EMAIL_ALREADY_EXISTS` | Email này đã được đăng ký cho tài khoản khác |
+| 403 | `FORBIDDEN` | Người gọi không có quyền `ROLE_ADMIN` |
 
 ---
 

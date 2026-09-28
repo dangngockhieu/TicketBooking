@@ -285,6 +285,9 @@ class AuthServiceImplTest {
                 acc.getRole() == Role.ORGANIZER
                         && acc.getStatus() == AccountStatus.ACTIVE
                         && acc.isRequirePasswordChange()));
+        verify(eventPublisher).publishOrganizerCreated(argThat(evt ->
+                "organizer@example.com".equals(evt.getEmail())
+                        && response.tempPassword().equals(evt.getTempPassword())));
     }
 
     @Test

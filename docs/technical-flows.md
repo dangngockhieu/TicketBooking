@@ -1,4 +1,4 @@
-﻿# ⚡ Technical Flows — TicketBooking
+# ⚡ Technical Flows — TicketBooking
 
 > Luồng xử lý kỹ thuật chi tiết cho các nghiệp vụ cốt lõi
 
@@ -58,29 +58,118 @@ Customer                    Auth Service                   Redis                
 4. **notification-service** (chưa tồn tại): consumer nghe `account.registered`, gửi email OTP thật qua JavaMail, ghi `notification_logs` (MongoDB) — cùng đợt xây dựng với `tickets.generated` (UC-S3).
 5. Cho tới khi bước 3–4 xong: môi trường dev có thể **log OTP ra console** hoặc **trả kèm trong response** (chỉ khi `spring.profiles.active=dev`) để test luồng verify mà không cần email thật.
 
-### 0.5. Luồng cấp tài khoản Organizer (KHÔNG dùng OTP) 🆕
+#### 0.5. Luồng cấp tài khoản Organizer & Tự động gửi Gmail mật khẩu tạm 🆕
 
-> Đây là luồng **khác hoàn toàn** với 0.1–0.4. Không có "đăng ký", không có `PENDING`, không có OTP.
+> Luồng này dành riêng cho bên tổ chức sự kiện (**Organizer**). Organizer **không tự đăng ký** trên website, không qua `PENDING` và không dùng OTP — tài khoản do Quản trị viên (Admin) khởi tạo trực tiếp sau khi đã thẩm định hồ sơ pháp lý. Hệ thống tự sinh mật khẩu tạm ngẫu nhiên và gửi thông báo kích hoạt tài khoản qua **Gmail SMTP**.
+
+#### 0.5.1. Sơ đồ tuần tự chi tiết (End-to-End Sequence Diagram)
 
 ```
-Bên tổ chức sự kiện          Admin (ngoài hệ thống)         Admin (trong hệ thống)        Auth Service
-        │                            │                              │                         │
-        │── liên hệ, gửi giấy phép ─►│                              │                         │
-        │   tổ chức sự kiện          │                              │                         │
-        │                            │── thẩm định thủ công ───────►│                         │
-        │                            │   (không qua app)            │                         │
-        │                            │                              │── POST /admin/organizers│
-        │                            │                              │   { email, fullName }   │
-        │                            │                              │                         │── INSERT accounts
-        │                            │                              │                         │   role=ORGANIZER
-        │                            │                              │                         │   status=ACTIVE (ngay)
-        │                            │                              │                         │   password = random tạm
-        │◄── nhận mật khẩu tạm (qua email 🔒⏳ hoặc Admin báo trực tiếp) ────────────────────│
-        │                            │                              │                         │
-        │── POST /auth/login (mật khẩu tạm) ─────────────────────────────────────────────────►│
-        │◄── AuthResponse { …, requirePasswordChange: true } ─────────────────────────────────│
-        │── PUT /auth/change-password (bắt buộc trước khi dùng app) ─────────────────────────►│
+Organizer               Admin                 Auth Service            Kafka Broker          Notification Svc          Gmail SMTP Server        MongoDB
+   │                      │                        │                       │                       │                          │                   │
+   │── [1] Nộp giấy phép ─►│                        │                       │                       │                          │                   │
+   │   tổ chức sự kiện    │                        │                       │                       │                          │                   │
+   │                      │── [2] Thẩm định duyệt ─►│                       │                       │                          │                   │
+   │                      │   POST /admin/         │                       │                       │                          │                   │
+   │                      │   organizers           │                       │                       │                          │                   │
+   │                      │   {email, fullName}    │                       │                       │                          │                   │
+   │                      │                        │── [3] Sinh mật khẩu   │                       │                          │                   │
+   │                      │                        │   tạm (SecureRandom)  │                       │                          │                   │
+   │                      │                        │── [4] INSERT accounts │                       │                          │                   │
+   │                      │                        │   role=ORGANIZER,     │                       │                          │                   │
+   │                      │                        │   status=ACTIVE,      │                       │                          │                   │
+   │                      │                        │   reqPasswordChange=T │                       │                          │                   │
+   │                      │                        │                       │                       │                          │                   │
+   │                      │                        │── [5] Publish event ─►│                       │                          │                   │
+   │                      │                        │   "auth.organizer-    │                       │                          │                   │
+   │                      │                        │    created"           │                       │                          │                   │
+   │                      │                        │   {email,tempPassword}│                       │                          │                   │
+   │                      │◄── 201 Created ────────┤                       │                       │                          │                   │
+   │                      │   {userInfo,           │                       │                       │                          │                   │
+   │                      │    tempPassword}       │                       │                       │                          │                   │
+   │                      │                        │                       │── [6] Consume ───────►│                          │                   │
+   │                      │                        │                       │   event               │                          │                   │
+   │                      │                        │                       │                       │── [7] Render Thymeleaf   │                   │
+   │                      │                        │                       │                       │   "organizer-welcome"    │                   │
+   │                      │                        │                       │                       │   (HTML email đẹp mắt)   │                   │
+   │                      │                        │                       │                       │                          │                   │
+   │                      │                        │                       │                       │── [8] Gửi email qua ────►│                   │
+   │                      │                        │                       │                       │   TLS cổng 587           │                   │
+   │                      │                        │                       │                       │   (App Password 16 số)   │                   │
+   │◄── [9] Nhận thư Gmail chào mừng kèm Mật khẩu tạm ─────────────────────────────────────────────│                          │                   │
+   │    "Tài khoản Organizer TicketBooking của bạn đã sẵn sàng"                                    │                          │                   │
+   │                      │                        │                       │                       │                          │                   │
+   │                      │                        │                       │                       │── [10] Ghi nhật ký ─────────────────────────►│
+   │                      │                        │                       │                       │    EmailLog (status:SENT,│                   │
+   │                      │                        │                       │                       │    type:ORGANIZER_WELCOME)                   │
+   │                      │                        │                       │                       │                          │                   │
+   │── [11] Đăng nhập lần đầu với Mật khẩu tạm (POST /auth/login) ────────►│                       │                          │                   │
+   │◄── 200 OK: AuthResponse { accessToken, requirePasswordChange: true } ─┤                       │                          │                   │
+   │                                                                       │                       │                          │                   │
+   │── [12] Bắt buộc đổi mật khẩu mới (PUT /auth/change-password) ────────►│                       │                          │                   │
+   │◄── 200 OK: "Mật khẩu đã được cập nhật thành công" (requirePasswordChange: false) ─────────────┤                       │                          │                   │
 ```
+
+#### 0.5.2. Các bước xử lý kỹ thuật chi tiết
+
+1. **Thẩm định hồ sơ ngoại tuyến (Offline Verification):**
+   * Doanh nghiệp hoặc Ban tổ chức gửi hồ sơ pháp lý (Giấy phép ĐKKD, giấy phép biểu diễn nghệ thuật) cho Admin phê duyệt thủ công ngoài hệ thống.
+   * Admin đăng nhập hệ thống với quyền `ROLE_ADMIN` và gọi API `POST /api/admin/organizers`.
+
+2. **Khởi tạo tài khoản & Sinh mật khẩu tạm (Auth Service):**
+   * Hệ thống tự động sinh một mật khẩu tạm ngẫu nhiên an toàn bằng `TempPasswordGenerator` (sử dụng `SecureRandom`, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt).
+   * Mật khẩu tạm được băm bằng `BCryptPasswordEncoder` trước khi lưu vào bảng `accounts` của PostgreSQL Auth DB (`postgres-auth:5433`).
+   * Tài khoản được gán trạng thái `status = ACTIVE` ngay lập tức (không cần qua bước kích hoạt OTP) và thiết lập cờ `require_password_change = true`.
+   * Admin nhận được response chứa `userInfo` và bản rõ `tempPassword` để dự phòng bàn giao trực tiếp nếu email gặp sự cố mạng.
+
+3. **Bắn sự kiện Kafka (Choreography Event):**
+   * Auth Service publish event `auth.organizer-created` (lớp `OrganizerWelcomeEvent`) vào Kafka topic:
+     ```json
+     {
+       "eventId": "3c90a1b2-...",
+       "timestamp": "2026-09-28T10:15:30Z",
+       "eventType": "auth.organizer-created",
+       "email": "organizer@company.com",
+       "tempPassword": "P@ssw0rdRandom#2026"
+     }
+     ```
+
+4. **Xử lý Consumer & Gửi Gmail (Notification Service):**
+   * `OrganizerWelcomeEmailListener` lắng nghe topic `auth.organizer-created`.
+   * Template engine (Thymeleaf) nạp file mẫu HTML responsive [`organizer-welcome.html`](file:///D:/Project/TicketBooking/services/notification/src/main/resources/templates/organizer-welcome.html) với các biến context:
+     * `email`: Địa chỉ hộp thư nhận.
+     * `tempPassword`: Mật khẩu tạm để hiển thị trong khung bảo mật.
+     * `supportEmail`: Email hỗ trợ kỹ thuật (`support@ticketbooking.vn`).
+     * `year`: Năm hiện tại (`2026`).
+   * `EmailServiceImpl` kết nối tới máy chủ **Gmail SMTP (`smtp.gmail.com:587`)**, sử dụng giao thức bảo mật STARTTLS và xác thực bằng **Mật khẩu ứng dụng (Google App Password 16 ký tự)**.
+   * Email gửi đi có tiêu đề: `Tài khoản Organizer TicketBooking của bạn đã sẵn sàng`.
+
+5. **Lưu vết nhật ký (Audit Log - MongoDB):**
+   * Ngay sau khi gửi thành công, `Notification Service` ghi một bản ghi vào collection `email_logs` của MongoDB:
+     * `type`: `"ORGANIZER_WELCOME"`
+     * `recipient`: `"organizer@company.com"`
+     * `status`: `"SENT"` (hoặc `"FAILED"` kèm thông báo lỗi chi tiết nếu rớt mạng)
+     * `sentAt`: Timestamp gửi.
+
+6. **Đăng nhập lần đầu & Buộc đổi mật khẩu (First Login Guard):**
+   * Organizer nhận email trong hộp thư Gmail, mở thư và sao chép mật khẩu tạm.
+   * Thực hiện đăng nhập qua `POST /auth/login`.
+   * Do `requirePasswordChange = true`, payload `AuthResponse` trả về cờ yêu cầu đổi mật khẩu. Frontend điều hướng bắt buộc người dùng tới trang `PUT /auth/change-password` để đặt mật khẩu riêng tư mới trước khi được phép truy cập bất kỳ tính năng quản trị sự kiện nào.
+
+#### 0.5.3. Cấu hình Gmail SMTP trong hệ thống
+
+Notification Service đọc cấu hình SMTP tập trung từ `config-server` (hoặc biến môi trường `.env`):
+
+```properties
+# Cấu hình Gmail SMTP trong notification-service.yaml / .env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your_system_email@gmail.com
+SMTP_PASSWORD=xxxx xxxx xxxx xxxx   # App Password 16 ký tự của Google (bật 2FA)
+MAIL_FROM=no-reply@ticketbooking.vn
+SUPPORT_EMAIL=support@ticketbooking.vn
+```
+
 ---
 
 ## 1. Luồng Giữ chỗ & Chống Overbooking (Seat Hold Flow)
@@ -591,6 +680,12 @@ Organizer App      API Gateway       Booking Service       Database
                     ┌───────────────────────────────────────────────┐
                     │                KAFKA BROKER                   │
                     │                                               │
+                    │  ┌────────────────────────┐                   │
+ Auth ─────────────►│  │ auth.organizer-created │                   │──────────► Notification
+ Service            │  ├────────────────────────┤                   │            Service
+                    │  │ auth.otp-requested     │                   │            (Send Email)
+                    │  └────────────────────────┘                   │
+                    │                                               │
                     │  ┌─────────────────┐  ┌────────────────────┐  │
  Payment ──────────►│  │ payment.success │  │ payment.failed     │  │──────────► Booking
  Service            │  └─────────────────┘  └────────────────────┘  │           Service
@@ -601,7 +696,7 @@ Organizer App      API Gateway       Booking Service       Database
                     │                                               │
                     │  ┌─────────────────┐                          │
  Booking ──────────►│  │tickets.generated│                          │──────────► Notification
- Service            │  └─────────────────┘                          │           Service
+ Service            │  └─────────────────┘                          │           Service (QR Mail)
                     │                                               │
                     │  ┌──────────────────────┐                     │
  Booking ──────────►│  │booking.refund-request│                     │──────────► Payment

@@ -24,6 +24,7 @@ import com.ticketbooking.auth.service.AuthService;
 import com.ticketbooking.auth.service.OtpPurpose;
 import com.ticketbooking.auth.service.OtpService;
 import com.ticketbooking.auth.util.TempPasswordGenerator;
+import com.ticketbooking.common.event.OrganizerWelcomeEvent;
 import com.ticketbooking.common.event.OtpEmailEvent;
 import com.ticketbooking.common.exception.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -259,9 +260,14 @@ public class AuthServiceImpl implements AuthService {
 
         Account saved = accountRepository.save(account);
 
-        // ⏳ Gửi tempPassword qua email cho Organizer phụ thuộc Kafka +
-        // notification-service (chưa triển khai). Tạm thời trả về trong response
-        // (xem AdminCreateOrganizerResponse) để Admin tự chuyển giao qua kênh khác.
+        eventPublisher.publishOrganizerCreated(OrganizerWelcomeEvent.builder()
+                .eventType("auth.organizer-created")
+                .email(email)
+                .tempPassword(tempPassword)
+                .build());
+
+        // Vẫn trả tempPassword trong response (dù đã gửi email) — Admin cần thấy
+        // ngay để đối chiếu/chuyển giao thủ công nếu email chậm hoặc vào spam.
         return new AdminCreateOrganizerResponse(toUserInfo(saved), tempPassword);
     }
 
