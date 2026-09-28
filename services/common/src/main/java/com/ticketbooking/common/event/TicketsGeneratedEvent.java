@@ -33,6 +33,20 @@ public class TicketsGeneratedEvent extends BaseEvent {
 
     private List<TicketClassQuantity> items;
 
+    /**
+     * Email khách hàng + chi tiết từng vé (QR) — dùng bởi Notification Service
+     * để gửi E-Ticket, KHÔNG dùng bởi Catalog Service (chỉ cần {@link #items}
+     * để trừ kho). {@code customerEmail}/{@code eventTitle} có thể {@code null}
+     * nếu Booking Service không lấy được từ Auth/Catalog Service tại thời điểm
+     * publish — Notification Service bỏ qua gửi mail (không chặn luồng xác
+     * nhận thanh toán) khi thiếu email.
+     */
+    private String customerEmail;
+
+    private String eventTitle;
+
+    private List<TicketDetail> tickets;
+
     @Getter
     @Setter
     @Builder
@@ -41,5 +55,16 @@ public class TicketsGeneratedEvent extends BaseEvent {
     public static class TicketClassQuantity implements Serializable {
         private UUID ticketClassId;
         private int quantity;
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TicketDetail implements Serializable {
+        private UUID ticketId;
+        private String ticketClassName;
+        private String qrCodeData;
     }
 }
