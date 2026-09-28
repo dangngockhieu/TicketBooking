@@ -1,6 +1,7 @@
 package com.ticketbooking.auth.repository;
 
 import com.ticketbooking.auth.entity.Account;
+import com.ticketbooking.auth.enums.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
@@ -11,4 +12,6 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
     Optional<Account> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    boolean existsByRole(Role role);
 }

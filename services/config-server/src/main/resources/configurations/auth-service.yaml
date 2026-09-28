@@ -4,6 +4,11 @@
 server:
   port: 8081
 
+app:
+  bootstrap-admin:
+    email: ${AUTH_ADMIN_EMAIL:}
+    password: ${AUTH_ADMIN_PASSWORD:}
+
 spring:
   # Cấu hình kết nối PostgreSQL (Container postgres-auth :5433)
   datasource:
