@@ -2,10 +2,15 @@ package com.ticketbooking.booking;
 
 import com.ticketbooking.booking.repository.BookingRepository;
 import com.ticketbooking.booking.repository.TicketRepository;
+import com.ticketbooking.common.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 @SpringBootTest(properties = {
         "spring.cloud.config.enabled=false",
@@ -25,8 +30,16 @@ class BookingApplicationTests {
     @MockitoBean
     private StringRedisTemplate stringRedisTemplate;
 
+    @Autowired
+    private ApplicationContext applicationContext;
+
     @Test
     void contextLoads() {
+    }
+
+    @Test
+    void globalExceptionHandlerIsRegistered() {
+        assertDoesNotThrow(() -> applicationContext.getBean(GlobalExceptionHandler.class));
     }
 
 }
