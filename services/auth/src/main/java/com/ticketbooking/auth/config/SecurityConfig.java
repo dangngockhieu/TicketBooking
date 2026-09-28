@@ -57,6 +57,7 @@ public class SecurityConfig {
                                                                 "/api/auth/reset-password",
                                                                 "/.well-known/jwks.json",
                                                                 "/actuator/**",
+                                                                "/api/internal/**",
                                                                 "/v3/api-docs/**",
                                                                 "/swagger-ui/**",
                                                                 "/swagger-ui.html")

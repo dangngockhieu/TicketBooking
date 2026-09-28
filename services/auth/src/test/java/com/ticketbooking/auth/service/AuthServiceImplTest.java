@@ -15,6 +15,7 @@ import com.ticketbooking.auth.entity.RefreshToken;
 import com.ticketbooking.auth.enums.AccountStatus;
 import com.ticketbooking.auth.enums.ClientType;
 import com.ticketbooking.auth.enums.Role;
+import com.ticketbooking.auth.event.AuthEventPublisher;
 import com.ticketbooking.auth.repository.AccountRepository;
 import com.ticketbooking.auth.repository.RefreshTokenRepository;
 import com.ticketbooking.auth.security.JwtTokenProvider;
@@ -59,6 +60,9 @@ class AuthServiceImplTest {
 
     @Mock
     private OtpService otpService;
+
+    @Mock
+    private AuthEventPublisher eventPublisher;
 
     @InjectMocks
     private AuthServiceImpl authService;

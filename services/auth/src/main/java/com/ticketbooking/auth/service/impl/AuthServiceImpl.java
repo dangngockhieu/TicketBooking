@@ -16,6 +16,7 @@ import com.ticketbooking.auth.entity.RefreshToken;
 import com.ticketbooking.auth.enums.AccountStatus;
 import com.ticketbooking.auth.enums.ClientType;
 import com.ticketbooking.auth.enums.Role;
+import com.ticketbooking.auth.event.AuthEventPublisher;
 import com.ticketbooking.auth.repository.AccountRepository;
 import com.ticketbooking.auth.repository.RefreshTokenRepository;
 import com.ticketbooking.auth.security.JwtTokenProvider;
@@ -23,6 +24,7 @@ import com.ticketbooking.auth.service.AuthService;
 import com.ticketbooking.auth.service.OtpPurpose;
 import com.ticketbooking.auth.service.OtpService;
 import com.ticketbooking.auth.util.TempPasswordGenerator;
+import com.ticketbooking.common.event.OtpEmailEvent;
 import com.ticketbooking.common.exception.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -39,18 +41,32 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final OtpService otpService;
+    private final AuthEventPublisher eventPublisher;
 
     public AuthServiceImpl(
             AccountRepository accountRepository,
             RefreshTokenRepository refreshTokenRepository,
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
-            OtpService otpService) {
+            OtpService otpService,
+            AuthEventPublisher eventPublisher) {
         this.accountRepository = accountRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.otpService = otpService;
+        this.eventPublisher = eventPublisher;
+    }
+
+    private void issueOtpAndNotify(Account account, OtpPurpose purpose) {
+        String otp = otpService.issueOtp(account.getId(), purpose);
+        eventPublisher.publishOtpRequested(OtpEmailEvent.builder()
+                .eventType("auth.otp-requested")
+                .email(account.getEmail())
+                .otp(otp)
+                .purpose(purpose.name())
+                .expiresInMinutes(OtpService.OTP_TTL_MINUTES)
+                .build());
     }
 
     @Override
@@ -70,7 +86,7 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         Account saved = accountRepository.save(account);
-        otpService.issueOtp(saved.getId(), OtpPurpose.EMAIL_VERIFICATION);
+        issueOtpAndNotify(saved, OtpPurpose.EMAIL_VERIFICATION);
 
         return toUserInfo(saved);
     }
@@ -109,7 +125,7 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ ban quản trị.");
         }
 
-        otpService.issueOtp(account.getId(), OtpPurpose.EMAIL_VERIFICATION);
+        issueOtpAndNotify(account, OtpPurpose.EMAIL_VERIFICATION);
     }
 
     @Override
@@ -255,7 +271,7 @@ public class AuthServiceImpl implements AuthService {
         // Im lặng bỏ qua nếu không tìm thấy tài khoản — endpoint này luôn trả 200
         // để không tiết lộ email nào đã đăng ký (chống account enumeration).
         accountRepository.findByEmail(email)
-                .ifPresent(account -> otpService.issueOtp(account.getId(), OtpPurpose.PASSWORD_RESET));
+                .ifPresent(account -> issueOtpAndNotify(account, OtpPurpose.PASSWORD_RESET));
     }
 
     @Override

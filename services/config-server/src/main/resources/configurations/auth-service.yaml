@@ -37,6 +37,15 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
 
+  # Apache Kafka (KRaft, container :9092) — Producer: auth.otp-requested cho
+  # Notification Service gửi email OTP thật (xem docs/technical-flows.md §0).
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+
 # Cấu hình Token JWT — RS256 (RSA Asymmetric Keys). Key đọc từ file (base64 DER: PKCS8 private / X509 public),
 # đường dẫn file trỏ tới bởi biến môi trường, KHÔNG lưu nội dung key trực tiếp trong .env
 jwt:

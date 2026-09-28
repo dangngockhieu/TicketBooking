@@ -17,7 +17,7 @@ import java.util.UUID;
 @Service
 public class OtpServiceImpl implements OtpService {
 
-    private static final Duration OTP_TTL = Duration.ofMinutes(5);
+    private static final Duration OTP_TTL = Duration.ofMinutes(OTP_TTL_MINUTES);
     private static final Duration COOLDOWN_TTL = Duration.ofSeconds(60);
 
     private final StringRedisTemplate redisTemplate;
@@ -41,9 +41,9 @@ public class OtpServiceImpl implements OtpService {
         redisTemplate.opsForValue().set(otpKey, otp, OTP_TTL);
         redisTemplate.opsForValue().set(cooldownKey, "1", COOLDOWN_TTL);
 
-        // ⏳ Gửi email OTP thật qua Kafka + notification-service chưa triển khai
-        // (notification-service chưa tồn tại trong repo — xem docs/technical-flows.md §0.4).
-        // Tạm thời log ra console để test thủ công ở môi trường dev.
+        // Gửi email OTP thật qua AuthServiceImpl (bắn OtpEmailEvent lên Kafka
+        // cho Notification Service) — log này chỉ để tiện debug ở dev, không
+        // còn là kênh gửi OTP duy nhất.
         log.info("[DEV-ONLY] OTP ({}) cho account {}: {}", purpose, accountId, otp);
 
         return otp;

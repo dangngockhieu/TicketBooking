@@ -10,6 +10,9 @@ import java.util.UUID;
  */
 public interface OtpService {
 
+    /** Thời hạn OTP (phút) — dùng bởi {@code AuthServiceImpl} khi build {@code OtpEmailEvent}. */
+    int OTP_TTL_MINUTES = 5;
+
     /**
      * Sinh OTP mới cho {@code accountId}, ghi đè OTP cũ (nếu có) trong Redis.
      * Áp dụng cooldown chống spam trước khi cho sinh lại.
