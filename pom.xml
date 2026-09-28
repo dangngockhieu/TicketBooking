@@ -30,6 +30,7 @@
         <module>services/booking</module>
         <module>services/payment</module>
         <module>services/queue</module>
+        <module>services/notification</module>
     </modules>
 
     <properties>

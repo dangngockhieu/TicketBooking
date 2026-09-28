@@ -445,6 +445,36 @@ services:
     networks:
       - ticketbooking-network
 
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification/Dockerfile
+    container_name: ticketbooking-notification-service
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888
+      SPRING_DATA_MONGODB_URI: mongodb://${MONGO_ROOT_USER:-mongo_admin}:${MONGO_ROOT_PASSWORD:-mongo_secure_pass_2026}@mongodb:27017/${MONGO_DATABASE:-notification_db}?authSource=admin
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_MAIL_HOST: ${SMTP_HOST}
+      SPRING_MAIL_PORT: ${SMTP_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SMTP_USERNAME}
+      SPRING_MAIL_PASSWORD: ${SMTP_PASSWORD}
+      NOTIFICATION_MAIL_FROM: ${MAIL_FROM:-no-reply@ticketbooking.vn}
+      NOTIFICATION_MAIL_SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@ticketbooking.vn}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      discovery:
+        condition: service_started
+    networks:
+      - ticketbooking-network
+
   api-gateway:
     build:
       context: .

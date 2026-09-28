@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+  <title>Vé điện tử TicketBooking</title>
+  <style>
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0; padding: 0; width: 100% !important; height: 100% !important; background-color: #f5f5f7; }
+
+    @media only screen and (max-width: 600px) {
+      .email-container { width: 100% !important; }
+      .email-padding { padding-left: 20px !important; padding-right: 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#f5f5f7;">
+  <!-- Preheader -->
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#f5f5f7;"
+       th:text="'Vé điện tử của bạn cho ' + ${eventTitle} + ' đã sẵn sàng.'">
+    Vé điện tử của bạn đã sẵn sàng.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f7;">
+    <tr>
+      <td align="center" style="padding: 40px 16px;">
+        <table role="presentation" class="email-container" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:600px; background-color:#ffffff;">
+
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding: 32px 40px 24px;">
+              <span style="font-family: -apple-system, 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 30px; font-weight: 600; color: #1d1d1f; letter-spacing: -0.3px;">
+                🎫 TicketBooking
+              </span>
+            </td>
+          </tr>
+
+          <!-- Accent bar -->
+          <tr>
+            <td style="padding: 0 40px;">
+              <div style="height: 3px; background-color: #0066cc; border-radius: 2px; line-height: 3px; font-size: 0;">&nbsp;</div>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td class="email-padding" style="padding: 32px 40px 8px; font-family: -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+              <h1 style="margin: 0 0 16px; font-size: 22px; line-height: 1.3; font-weight: 600; color: #1d1d1f;">
+                Vé điện tử của bạn đã sẵn sàng 🎉
+              </h1>
+              <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #333333;">
+                Thanh toán thành công cho <strong style="color:#1d1d1f;" th:text="${eventTitle}">Tên sự kiện</strong>.
+                Vui lòng xuất trình mã QR bên dưới tại cổng soát vé — mỗi mã chỉ quét được đúng 1 lần.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Ticket list -->
+          <tr th:each="ticket : ${tickets}">
+            <td align="center" style="padding: 8px 40px 24px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f7; border: 1px solid #e0e0e0; border-radius: 12px;">
+                <tr>
+                  <td align="center" style="padding: 24px;">
+                    <p style="margin: 0 0 16px; font-size: 16px; font-weight: 600; color: #1d1d1f;" th:text="${ticket.ticketClassName}">
+                      Hạng vé
+                    </p>
+                    <img th:src="${ticket.qrCid}" width="180" height="180" alt="Mã QR vé" style="display:block; border-radius: 8px;" />
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Notes -->
+          <tr>
+            <td class="email-padding" style="padding: 0 40px 32px; font-family: -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #fff8e6; border-radius: 8px;">
+                <tr>
+                  <td style="padding: 14px 16px; font-size: 13px; line-height: 1.6; color: #7a5c00;">
+                    ⚠️ Không chia sẻ ảnh mã QR này công khai — bất kỳ ai có ảnh đều có thể dùng để vào cổng thay bạn.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding: 0 40px;">
+              <div style="height: 1px; background-color: #e0e0e0; line-height: 1px; font-size: 0;">&nbsp;</div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td class="email-padding" style="padding: 24px 40px 32px; font-family: -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+              <p style="margin: 0 0 16px; font-size: 12px; line-height: 1.6; color: #7a7a7a;">
+                Cần hỗ trợ? Liên hệ <a th:href="'mailto:' + ${supportEmail}" th:text="${supportEmail}" style="color:#0066cc; text-decoration: none;">support@ticketbooking.vn</a>
+              </p>
+              <p style="margin: 0; font-size: 12px; line-height: 1.6; color: #a1a1a6;">
+                <span th:text="'© ' + ${year} + ' TicketBooking. Đây là email tự động, vui lòng không trả lời trực tiếp.'">© TicketBooking</span>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

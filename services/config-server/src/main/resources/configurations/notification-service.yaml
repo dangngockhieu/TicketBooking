@@ -1,0 +1,52 @@
+# ==============================================================================
+# NOTIFICATION SERVICE CONFIGURATION (PHÂN PHỐI BỞI CONFIG SERVER)
+# ==============================================================================
+server:
+  port: 8086
+
+spring:
+  # MongoDB (Container mongodb :27017) — lưu email_logs để tra soát/chống gửi
+  # trùng E-Ticket (xem docs/development-plan.md GĐ4 mục 2, Consumer 3).
+  # Dùng root user (authSource=admin) — không có init-script tạo riêng
+  # notification_user trong docker-compose.yml hiện tại.
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}:${MONGO_PORT}/${MONGO_DATABASE}?authSource=admin
+
+  # SMTP thật để gửi email OTP + E-Ticket.
+  mail:
+    host: ${SMTP_HOST}
+    port: ${SMTP_PORT}
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  thymeleaf:
+    cache: false # dev-friendly — bật lại true khi build production thật
+
+  # Apache Kafka (KRaft, container :9092) — Consumer: auth.otp-requested (gửi
+  # OTP), tickets.generated (gửi E-Ticket, xem docs/development-plan.md GĐ4
+  # mục 2, Consumer 3).
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}
+    consumer:
+      group-id: notification-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.ticketbooking.common.event
+
+# Địa chỉ gửi đi + email hỗ trợ hiển thị trong footer template (xem
+# TicketBooking-Frontend/email-templates/README.md).
+notification:
+  mail:
+    from: ${MAIL_FROM:no-reply@ticketbooking.vn}
+    support-email: ${SUPPORT_EMAIL:support@ticketbooking.vn}
