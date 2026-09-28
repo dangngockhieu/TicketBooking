@@ -1,5 +1,6 @@
 package com.ticketbooking.booking.service;
 
+import com.ticketbooking.booking.client.AuthClient;
 import com.ticketbooking.booking.client.CatalogClient;
 import com.ticketbooking.booking.client.QueueClient;
 import com.ticketbooking.booking.client.UserClient;
@@ -60,6 +61,9 @@ class BookingServiceImplTest {
     private UserClient userClient;
 
     @Mock
+    private AuthClient authClient;
+
+    @Mock
     private SeatHoldService seatHoldService;
 
     @Mock
@@ -76,7 +80,7 @@ class BookingServiceImplTest {
     @BeforeEach
     void setUp() {
         bookingService = new BookingServiceImpl(bookingRepository, ticketRepository, catalogClient, queueClient,
-                userClient, seatHoldService, eventPublisher, 600);
+                userClient, authClient, seatHoldService, eventPublisher, 600);
         lenient().when(queueClient.checkAccess(any(), any(), any())).thenReturn(new QueueAccessDto(false, true));
         customerId = UUID.randomUUID();
         organizerId = UUID.randomUUID();

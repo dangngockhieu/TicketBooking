@@ -1,5 +1,6 @@
 package com.ticketbooking.booking.service.impl;
 
+import com.ticketbooking.booking.client.AuthClient;
 import com.ticketbooking.booking.client.CatalogClient;
 import com.ticketbooking.booking.client.QueueClient;
 import com.ticketbooking.booking.client.UserClient;
@@ -54,6 +55,7 @@ public class BookingServiceImpl implements BookingService {
     private final CatalogClient catalogClient;
     private final QueueClient queueClient;
     private final UserClient userClient;
+    private final AuthClient authClient;
     private final SeatHoldService seatHoldService;
     private final BookingEventPublisher eventPublisher;
     private final long holdTtlSeconds;
@@ -64,6 +66,7 @@ public class BookingServiceImpl implements BookingService {
             CatalogClient catalogClient,
             QueueClient queueClient,
             UserClient userClient,
+            AuthClient authClient,
             SeatHoldService seatHoldService,
             BookingEventPublisher eventPublisher,
             @Value("${booking.hold.ttl-seconds:600}") long holdTtlSeconds) {
@@ -72,6 +75,7 @@ public class BookingServiceImpl implements BookingService {
         this.catalogClient = catalogClient;
         this.queueClient = queueClient;
         this.userClient = userClient;
+        this.authClient = authClient;
         this.seatHoldService = seatHoldService;
         this.eventPublisher = eventPublisher;
         this.holdTtlSeconds = holdTtlSeconds;
@@ -200,11 +204,29 @@ public class BookingServiceImpl implements BookingService {
                         .quantity(entry.getValue())
                         .build())
                 .toList();
+
+        // Enrichment cho Notification Service (E-Ticket qua email) — bỏ qua gửi
+        // mail (không chặn luồng xác nhận thanh toán) nếu không lấy được email
+        // hoặc tiêu đề sự kiện.
+        String customerEmail = authClient.findEmail(booking.getCustomerId());
+        String eventTitle = fetchEventTitleSafely(booking.getEventId());
+        List<TicketsGeneratedEvent.TicketDetail> ticketDetails = booking.getTickets().stream()
+                .filter(t -> t.getStatus() == TicketStatus.ISSUED)
+                .map(t -> TicketsGeneratedEvent.TicketDetail.builder()
+                        .ticketId(t.getId())
+                        .ticketClassName(t.getTicketClassName())
+                        .qrCodeData(t.getQrCodeData())
+                        .build())
+                .toList();
+
         eventPublisher.publishTicketsGenerated(TicketsGeneratedEvent.builder()
                 .eventType("tickets.generated")
                 .bookingId(booking.getId())
                 .catalogEventId(booking.getEventId())
                 .items(items)
+                .customerEmail(customerEmail)
+                .eventTitle(eventTitle)
+                .tickets(ticketDetails)
                 .build());
     }
 
@@ -304,6 +326,16 @@ public class BookingServiceImpl implements BookingService {
 
     private static double rate(long numerator, long denominator) {
         return denominator > 0 ? (double) numerator / denominator : 0d;
+    }
+
+    /** Không chặn xác nhận thanh toán nếu Catalog Service tạm thời không gọi được — chỉ dùng để hiển thị trong email E-Ticket. */
+    private String fetchEventTitleSafely(UUID eventId) {
+        try {
+            return catalogClient.getEvent(eventId).title();
+        } catch (RuntimeException ex) {
+            log.warn("Không lấy được tên sự kiện {} cho email E-Ticket: {}", eventId, ex.getMessage());
+            return null;
+        }
     }
 
     private void requestRefund(UUID bookingId, UUID transactionId, BigDecimal amount, String gatewayTransId, String reason) {
