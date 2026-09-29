@@ -270,9 +270,8 @@ public class AuthServiceImpl implements AuthService {
                 .tempPassword(tempPassword)
                 .build());
 
-        // Vẫn trả tempPassword trong response (dù đã gửi email) — Admin cần thấy
-        // ngay để đối chiếu/chuyển giao thủ công nếu email chậm hoặc vào spam.
-        return new AdminCreateOrganizerResponse(toUserInfo(saved), tempPassword);
+        // Mật khẩu tạm chỉ đi qua email — không trả về cho Admin.
+        return new AdminCreateOrganizerResponse(toUserInfo(saved));
     }
 
     @Override

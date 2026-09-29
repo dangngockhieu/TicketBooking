@@ -277,8 +277,6 @@ class AuthServiceImplTest {
 
         AdminCreateOrganizerResponse response = authService.createOrganizer(request);
 
-        assertNotNull(response.tempPassword());
-        assertEquals(12, response.tempPassword().length());
         assertEquals("ORGANIZER", response.account().role());
         assertEquals("ACTIVE", response.account().status());
         verify(accountRepository).save(argThat(acc ->
@@ -287,7 +285,8 @@ class AuthServiceImplTest {
                         && acc.isRequirePasswordChange()));
         verify(eventPublisher).publishOrganizerCreated(argThat(evt ->
                 "organizer@example.com".equals(evt.getEmail())
-                        && response.tempPassword().equals(evt.getTempPassword())));
+                        && evt.getTempPassword() != null
+                        && evt.getTempPassword().length() == 12));
     }
 
     @Test
