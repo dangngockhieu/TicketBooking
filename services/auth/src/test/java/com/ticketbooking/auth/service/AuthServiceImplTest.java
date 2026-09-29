@@ -310,7 +310,7 @@ class AuthServiceImplTest {
                 .revoked(false)
                 .build();
 
-        when(refreshTokenRepository.findByToken("valid_refresh_token")).thenReturn(Optional.of(tokenInDb));
+        when(refreshTokenRepository.findByToken(any())).thenReturn(Optional.of(tokenInDb));
         when(jwtTokenProvider.createAccessToken(any())).thenReturn("new_access_token");
         when(jwtTokenProvider.createRefreshToken("user@example.com")).thenReturn("new_refresh_token");
         when(jwtTokenProvider.getAccessTokenExpirationSeconds()).thenReturn(3600L);
@@ -409,7 +409,7 @@ class AuthServiceImplTest {
                 .revoked(true) // Đã từng bị thu hồi!
                 .build();
 
-        when(refreshTokenRepository.findByToken("revoked_refresh_token")).thenReturn(Optional.of(revokedToken));
+        when(refreshTokenRepository.findByToken(any())).thenReturn(Optional.of(revokedToken));
 
         assertThrows(InvalidTokenException.class, () -> authService.refresh("revoked_refresh_token"));
         // Xác minh toàn bộ session của tài khoản bị thu hồi để chống tấn công

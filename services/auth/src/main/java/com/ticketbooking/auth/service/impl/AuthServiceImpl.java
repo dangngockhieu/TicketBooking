@@ -31,7 +31,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 
 @Service
 @Transactional
@@ -157,7 +161,7 @@ public class AuthServiceImpl implements AuthService {
     public LoginResult refresh(String rawRefreshToken) {
         jwtTokenProvider.checkValidToken(rawRefreshToken);
 
-        RefreshToken savedToken = refreshTokenRepository.findByToken(rawRefreshToken)
+        RefreshToken savedToken = refreshTokenRepository.findByToken(hashToken(rawRefreshToken))
                 .orElseThrow(() -> new InvalidTokenException("Refresh token không tồn tại hoặc đã bị thu hồi."));
 
         Account account = savedToken.getAccount();
@@ -312,7 +316,7 @@ public class AuthServiceImpl implements AuthService {
         Instant expiredAt = Instant.now().plusSeconds(jwtTokenProvider.getRefreshTokenExpirationSeconds());
         RefreshToken tokenEntity = RefreshToken.builder()
                 .account(account)
-                .token(refreshToken)
+                .token(hashToken(refreshToken))
                 .clientType(clientType)
                 .expiredAt(expiredAt)
                 .revoked(false)
@@ -330,6 +334,18 @@ public class AuthServiceImpl implements AuthService {
                 account.isRequirePasswordChange());
 
         return new LoginResult(authResponse, refreshToken, clientType);
+    }
+
+    // Không lưu JWT thô trong DB — chỉ lưu hash SHA-256 (hex) để tra cứu, tránh
+    // token bị lộ nếu DB rò rỉ và giữ độ dài cột cố định bất kể số claim trong JWT.
+    private String hashToken(String rawToken) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(rawToken.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 không khả dụng trên JVM này.", e);
+        }
     }
 
     private AuthResponse.UserInfo toUserInfo(Account account) {
