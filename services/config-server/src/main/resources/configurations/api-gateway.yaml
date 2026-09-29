@@ -8,126 +8,127 @@ server:
 spring:
   cloud:
     gateway:
-      # §9.1 — Route Table: định tuyến theo Path, forward qua Eureka (lb://<service-id>)
-      routes:
-        - id: auth-service
-          uri: lb://auth-service
-          predicates:
-            - Path=/api/auth/**
-        - id: auth-service-jwks
-          uri: lb://auth-service
-          predicates:
-            - Path=/.well-known/jwks.json
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/users/**
-        - id: user-service-organizer-bank-account
-          uri: lb://user-service
-          predicates:
-            - Path=/api/organizer/bank-account
-        # Cụ thể hơn phải đứng TRƯỚC auth-service-admin-organizers bên dưới —
-        # Gateway khớp route theo thứ tự khai báo, khớp đầu tiên thắng.
-        - id: user-service-admin-bank-account
-          uri: lb://user-service
-          predicates:
-            - Path=/api/admin/organizers/*/bank-account/**
-        - id: catalog-service-events
-          uri: lb://catalog-service
-          predicates:
-            - Path=/api/events/**
-        - id: catalog-service-categories
-          uri: lb://catalog-service
-          predicates:
-            - Path=/api/categories/**
-        - id: catalog-service-admin-categories
-          uri: lb://catalog-service
-          predicates:
-            - Path=/api/admin/categories/**
-        - id: catalog-service-admin-events
-          uri: lb://catalog-service
-          predicates:
-            - Path=/api/admin/events/**
-        - id: auth-service-admin-organizers
-          uri: lb://auth-service
-          predicates:
-            - Path=/api/admin/organizers/**
-        - id: booking-service
-          uri: lb://booking-service
-          predicates:
-            - Path=/api/bookings/**
-        - id: payment-service
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/payments/**
-        - id: payment-service-organizer-wallet
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/organizer/wallet
-        - id: payment-service-organizer-payouts
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/organizer/payouts/**
-        - id: payment-service-admin-payouts
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/admin/payouts/**
-        - id: queue-service-status
-          uri: lb://queue-service
-          predicates:
-            - Path=/api/queue/**
-        - id: queue-service-admin
-          uri: lb://queue-service
-          predicates:
-            - Path=/api/admin/queue/**
-        # WebSocket STOMP (Virtual Waiting Room) — Spring Cloud Gateway tự
-        # proxy WebSocket khi scheme là ws/wss, xem docs/virtual-waiting-room.md.
-        - id: queue-service-websocket
-          uri: lb:ws://queue-service
-          predicates:
-            - Path=/ws/queue/**
+      server:
+        webflux:
+          routes:
+            - id: auth-service
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/**
+            - id: auth-service-jwks
+              uri: lb://auth-service
+              predicates:
+                - Path=/.well-known/jwks.json
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/users/**
+            - id: user-service-organizer-bank-account
+              uri: lb://user-service
+              predicates:
+                - Path=/api/organizer/bank-account
+            # Cụ thể hơn phải đứng TRƯỚC auth-service-admin-organizers bên dưới —
+            # Gateway khớp route theo thứ tự khai báo, khớp đầu tiên thắng.
+            - id: user-service-admin-bank-account
+              uri: lb://user-service
+              predicates:
+                - Path=/api/admin/organizers/*/bank-account/**
+            - id: catalog-service-events
+              uri: lb://catalog-service
+              predicates:
+                - Path=/api/events/**
+            - id: catalog-service-categories
+              uri: lb://catalog-service
+              predicates:
+                - Path=/api/categories/**
+            - id: catalog-service-admin-categories
+              uri: lb://catalog-service
+              predicates:
+                - Path=/api/admin/categories/**
+            - id: catalog-service-admin-events
+              uri: lb://catalog-service
+              predicates:
+                - Path=/api/admin/events/**
+            - id: auth-service-admin-organizers
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/admin/organizers/**
+            - id: booking-service
+              uri: lb://booking-service
+              predicates:
+                - Path=/api/bookings/**
+            - id: payment-service
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/payments/**
+            - id: payment-service-organizer-wallet
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/organizer/wallet
+            - id: payment-service-organizer-payouts
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/organizer/payouts/**
+            - id: payment-service-admin-payouts
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/admin/payouts/**
+            - id: queue-service-status
+              uri: lb://queue-service
+              predicates:
+                - Path=/api/queue/**
+            - id: queue-service-admin
+              uri: lb://queue-service
+              predicates:
+                - Path=/api/admin/queue/**
+            # WebSocket STOMP (Virtual Waiting Room) — Spring Cloud Gateway tự
+            # proxy WebSocket khi scheme là ws/wss, xem docs/virtual-waiting-room.md.
+            - id: queue-service-websocket
+              uri: lb:ws://queue-service
+              predicates:
+                - Path=/ws/queue/**
 
-        # Swagger — proxy /v3/api-docs của từng service dưới /docs/<service>/
-        # để gateway tự aggregate vào 1 Swagger UI duy nhất (xem
-        # springdoc.swagger-ui.urls bên dưới). RewritePath bỏ tiền tố
-        # /docs/<service> trước khi forward, vì mỗi service chỉ phục vụ đúng
-        # 1 path /v3/api-docs.
-        - id: auth-service-api-docs
-          uri: lb://auth-service
-          predicates:
-            - Path=/docs/auth-service/v3/api-docs
-          filters:
-            - RewritePath=/docs/auth-service/v3/api-docs, /v3/api-docs
-        - id: user-service-api-docs
-          uri: lb://user-service
-          predicates:
-            - Path=/docs/user-service/v3/api-docs
-          filters:
-            - RewritePath=/docs/user-service/v3/api-docs, /v3/api-docs
-        - id: catalog-service-api-docs
-          uri: lb://catalog-service
-          predicates:
-            - Path=/docs/catalog-service/v3/api-docs
-          filters:
-            - RewritePath=/docs/catalog-service/v3/api-docs, /v3/api-docs
-        - id: booking-service-api-docs
-          uri: lb://booking-service
-          predicates:
-            - Path=/docs/booking-service/v3/api-docs
-          filters:
-            - RewritePath=/docs/booking-service/v3/api-docs, /v3/api-docs
-        - id: payment-service-api-docs
-          uri: lb://payment-service
-          predicates:
-            - Path=/docs/payment-service/v3/api-docs
-          filters:
-            - RewritePath=/docs/payment-service/v3/api-docs, /v3/api-docs
-        - id: queue-service-api-docs
-          uri: lb://queue-service
-          predicates:
-            - Path=/docs/queue-service/v3/api-docs
-          filters:
-            - RewritePath=/docs/queue-service/v3/api-docs, /v3/api-docs
+            # Swagger — proxy /v3/api-docs của từng service dưới /docs/<service>/
+            # để gateway tự aggregate vào 1 Swagger UI duy nhất (xem
+            # springdoc.swagger-ui.urls bên dưới). RewritePath bỏ tiền tố
+            # /docs/<service> trước khi forward, vì mỗi service chỉ phục vụ đúng
+            # 1 path /v3/api-docs.
+            - id: auth-service-api-docs
+              uri: lb://auth-service
+              predicates:
+                - Path=/docs/auth-service/v3/api-docs
+              filters:
+                - RewritePath=/docs/auth-service/v3/api-docs, /v3/api-docs
+            - id: user-service-api-docs
+              uri: lb://user-service
+              predicates:
+                - Path=/docs/user-service/v3/api-docs
+              filters:
+                - RewritePath=/docs/user-service/v3/api-docs, /v3/api-docs
+            - id: catalog-service-api-docs
+              uri: lb://catalog-service
+              predicates:
+                - Path=/docs/catalog-service/v3/api-docs
+              filters:
+                - RewritePath=/docs/catalog-service/v3/api-docs, /v3/api-docs
+            - id: booking-service-api-docs
+              uri: lb://booking-service
+              predicates:
+                - Path=/docs/booking-service/v3/api-docs
+              filters:
+                - RewritePath=/docs/booking-service/v3/api-docs, /v3/api-docs
+            - id: payment-service-api-docs
+              uri: lb://payment-service
+              predicates:
+                - Path=/docs/payment-service/v3/api-docs
+              filters:
+                - RewritePath=/docs/payment-service/v3/api-docs, /v3/api-docs
+            - id: queue-service-api-docs
+              uri: lb://queue-service
+              predicates:
+                - Path=/docs/queue-service/v3/api-docs
+              filters:
+                - RewritePath=/docs/queue-service/v3/api-docs, /v3/api-docs
 
   # §9.2 — JWT sơ bộ tại Gateway. Cùng jwk-set-uri với user-service: chỉ verify
   # bằng Public Key (Zero Trust), không giữ bí mật nào của auth-service.
@@ -156,3 +157,9 @@ springdoc:
         url: /docs/payment-service/v3/api-docs
       - name: queue-service
         url: /docs/queue-service/v3/api-docs
+
+# CORS — origin frontend được phép gọi qua Gateway (điểm vào duy nhất, mỗi
+# service phía sau không tự cấu hình CORS riêng). Nhiều origin cách nhau bởi
+# dấu phẩy, ví dụ khi có cả domain dev lẫn domain production.
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
