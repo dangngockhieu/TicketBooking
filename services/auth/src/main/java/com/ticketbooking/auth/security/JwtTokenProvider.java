@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class JwtTokenProvider {
@@ -47,6 +48,7 @@ public class JwtTokenProvider {
         Instant validity = now.plus(jwtProperties.refreshTokenExpirationSeconds(), ChronoUnit.SECONDS);
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
+                .id(UUID.randomUUID().toString())
                 .issuedAt(now)
                 .expiresAt(validity)
                 .subject(email)
