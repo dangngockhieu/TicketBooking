@@ -36,7 +36,8 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.GET,
                                                                 "/api/categories",
                                                                 "/api/events",
-                                                                "/api/events/**")
+                                                                "/api/events/**",
+                                                                "/uploads/events/**")
                                                 .permitAll()
                                                 .requestMatchers("/actuator/**")
                                                 .permitAll()

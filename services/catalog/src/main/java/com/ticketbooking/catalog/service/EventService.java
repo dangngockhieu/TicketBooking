@@ -8,6 +8,7 @@ import com.ticketbooking.catalog.dto.response.EventResponse;
 import com.ticketbooking.common.dto.PageResponse;
 import com.ticketbooking.common.event.TicketsGeneratedEvent;
 import org.springframework.data.domain.Pageable;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
@@ -22,9 +23,18 @@ public interface EventService {
     /** Chi tiết công khai — luôn chỉ trả sự kiện PUBLISHED. */
     EventResponse getPublicDetail(UUID eventId);
 
-    EventResponse create(UUID organizerId, CreateEventRequest request);
+    /**
+     * {@code image} (tùy chọn) ghi đè {@code request.bannerUrl()} bằng ảnh vừa
+     * upload (xem EventImageService).
+     */
+    EventResponse create(UUID organizerId, CreateEventRequest request, MultipartFile image);
 
-    EventResponse update(UUID organizerId, UUID eventId, UpdateEventRequest request);
+    /**
+     * {@code image} (tùy chọn): nếu có, ảnh banner cũ (nếu tồn tại và do chính
+     * hệ thống lưu) sẽ bị xóa trước khi lưu ảnh mới, tránh tồn file rác trên
+     * đĩa (xem EventImageService#delete).
+     */
+    EventResponse update(UUID organizerId, UUID eventId, UpdateEventRequest request, MultipartFile image);
 
     EventResponse publish(UUID organizerId, UUID eventId);
 

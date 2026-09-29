@@ -17,6 +17,7 @@ import com.ticketbooking.catalog.repository.EventRepository;
 import com.ticketbooking.catalog.repository.EventSpecifications;
 import com.ticketbooking.catalog.repository.ProcessedTicketEventRepository;
 import com.ticketbooking.catalog.repository.TicketClassRepository;
+import com.ticketbooking.catalog.service.EventImageService;
 import com.ticketbooking.catalog.service.EventService;
 import com.ticketbooking.common.dto.PageResponse;
 import com.ticketbooking.common.event.TicketsGeneratedEvent;
@@ -29,6 +30,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -56,6 +58,7 @@ public class EventServiceImpl implements EventService {
     private final ProcessedTicketEventRepository processedTicketEventRepository;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final EventImageService eventImageService;
 
     public EventServiceImpl(
             EventRepository eventRepository,
@@ -63,13 +66,15 @@ public class EventServiceImpl implements EventService {
             TicketClassRepository ticketClassRepository,
             ProcessedTicketEventRepository processedTicketEventRepository,
             StringRedisTemplate redisTemplate,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            EventImageService eventImageService) {
         this.eventRepository = eventRepository;
         this.categoryRepository = categoryRepository;
         this.ticketClassRepository = ticketClassRepository;
         this.processedTicketEventRepository = processedTicketEventRepository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.eventImageService = eventImageService;
     }
 
     @Override
@@ -124,8 +129,11 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public EventResponse create(UUID organizerId, CreateEventRequest request) {
+    public EventResponse create(UUID organizerId, CreateEventRequest request, MultipartFile image) {
         Category category = resolveCategory(request.categoryId());
+        String bannerUrl = (image != null && !image.isEmpty())
+                ? eventImageService.store(image)
+                : request.bannerUrl();
 
         Event event = Event.builder()
                 .category(category)
@@ -134,7 +142,7 @@ public class EventServiceImpl implements EventService {
                 .description(request.description())
                 .location(request.location())
                 .venueName(request.venueName())
-                .bannerUrl(request.bannerUrl())
+                .bannerUrl(bannerUrl)
                 .startTime(request.startTime())
                 .endTime(request.endTime())
                 .saleStartTime(request.saleStartTime())
@@ -156,19 +164,25 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public EventResponse update(UUID organizerId, UUID eventId, UpdateEventRequest request) {
+    public EventResponse update(UUID organizerId, UUID eventId, UpdateEventRequest request, MultipartFile image) {
         Event event = eventRepository.findWithDetailsById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sự kiện."));
         requireOwner(event, organizerId);
 
         Category category = resolveCategory(request.categoryId());
 
+        String bannerUrl = request.bannerUrl();
+        if (image != null && !image.isEmpty()) {
+            eventImageService.delete(event.getBannerUrl());
+            bannerUrl = eventImageService.store(image);
+        }
+
         event.setCategory(category);
         event.setTitle(request.title());
         event.setDescription(request.description());
         event.setLocation(request.location());
         event.setVenueName(request.venueName());
-        event.setBannerUrl(request.bannerUrl());
+        event.setBannerUrl(bannerUrl);
         event.setStartTime(request.startTime());
         event.setEndTime(request.endTime());
         event.setSaleStartTime(request.saleStartTime());

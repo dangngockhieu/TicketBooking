@@ -4,7 +4,19 @@
 server:
   port: 8083
 
+# Thư mục lưu ảnh sự kiện do Organizer upload (banner), phục vụ qua
+# WebConfig#addResourceHandlers dưới /uploads/events/**. Đường dẫn tương đối
+# theo working directory của tiến trình (mvnw -pl services/catalog spring-boot:run
+# chạy với cwd = services/catalog).
+catalog:
+  upload:
+    event-images-dir: uploads/events
+
 spring:
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
   # Cấu hình kết nối PostgreSQL (Container postgres-catalog :5435)
   datasource:
     url: jdbc:postgresql://${CATALOG_DB_HOST}:${CATALOG_DB_PORT}/${CATALOG_DB_NAME}

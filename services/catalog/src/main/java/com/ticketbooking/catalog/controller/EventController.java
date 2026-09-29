@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -47,19 +48,28 @@ public class EventController {
         return ResponseEntity.ok(ApiResponse.success(eventService.getPublicDetail(eventId)));
     }
 
-    @PostMapping
+    /**
+     * multipart/form-data: phần "data" là JSON của CreateEventRequest, phần
+     * "image" (tùy chọn) là file ảnh banner — nếu có, URL ảnh lưu được sẽ ghi
+     * đè bannerUrl trong "data" (xem EventImageService#store).
+     */
+    @PostMapping(consumes = "multipart/form-data")
     @PreAuthorize("hasRole('ORGANIZER')")
-    public ResponseEntity<ApiResponse<EventResponse>> create(@Valid @RequestBody CreateEventRequest request) {
-        EventResponse response = eventService.create(currentOrganizerId(), request);
+    public ResponseEntity<ApiResponse<EventResponse>> create(
+            @Valid @RequestPart("data") CreateEventRequest request,
+            @RequestPart(value = "image", required = false) MultipartFile image) {
+        EventResponse response = eventService.create(currentOrganizerId(), request, image);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Tạo sự kiện thành công.", response));
     }
 
-    @PutMapping("/{eventId}")
+    @PutMapping(value = "/{eventId}", consumes = "multipart/form-data")
     @PreAuthorize("hasRole('ORGANIZER')")
     public ResponseEntity<ApiResponse<EventResponse>> update(
-            @PathVariable UUID eventId, @Valid @RequestBody UpdateEventRequest request) {
-        EventResponse response = eventService.update(currentOrganizerId(), eventId, request);
+            @PathVariable UUID eventId,
+            @Valid @RequestPart("data") UpdateEventRequest request,
+            @RequestPart(value = "image", required = false) MultipartFile image) {
+        EventResponse response = eventService.update(currentOrganizerId(), eventId, request, image);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật sự kiện thành công.", response));
     }
 

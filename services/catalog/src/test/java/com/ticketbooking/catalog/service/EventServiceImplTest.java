@@ -63,6 +63,9 @@ class EventServiceImplTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private EventImageService eventImageService;
+
     private EventServiceImpl eventService;
 
     private UUID organizerId;
@@ -73,7 +76,7 @@ class EventServiceImplTest {
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         eventService = new EventServiceImpl(eventRepository, categoryRepository, ticketClassRepository,
-                processedTicketEventRepository, redisTemplate, objectMapper);
+                processedTicketEventRepository, redisTemplate, objectMapper, eventImageService);
 
         organizerId = UUID.randomUUID();
         eventId = UUID.randomUUID();
@@ -101,7 +104,7 @@ class EventServiceImplTest {
             return event;
         });
 
-        EventResponse result = eventService.create(organizerId, request);
+        EventResponse result = eventService.create(organizerId, request, null);
 
         assertEquals(EventStatus.DRAFT, result.status());
         assertEquals(1, result.ticketClasses().size());
@@ -116,7 +119,7 @@ class EventServiceImplTest {
         when(eventRepository.findWithDetailsById(eventId)).thenReturn(Optional.of(draftEvent));
 
         UUID anotherOrganizer = UUID.randomUUID();
-        assertThrows(ForbiddenException.class, () -> eventService.update(anotherOrganizer, eventId, request));
+        assertThrows(ForbiddenException.class, () -> eventService.update(anotherOrganizer, eventId, request, null));
         verify(eventRepository, never()).save(any());
     }
 
@@ -127,7 +130,7 @@ class EventServiceImplTest {
                 Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), null, null);
         when(eventRepository.findWithDetailsById(eventId)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> eventService.update(organizerId, eventId, request));
+        assertThrows(ResourceNotFoundException.class, () -> eventService.update(organizerId, eventId, request, null));
     }
 
     @Test

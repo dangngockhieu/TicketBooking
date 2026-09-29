@@ -83,6 +83,11 @@ yarn-error.log*
 # Redis dump
 dump.rdb
 
+# Local file uploads (event images, etc.) — không commit nội dung, chỉ giữ cấu trúc thư mục
+services/catalog/uploads/**
+!services/catalog/uploads/**/
+!services/catalog/uploads/**/.gitkeep
+
 # Internal / Private Docs
 docs/development-plan.md
 docs/load-testing-report.md
