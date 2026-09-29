@@ -76,7 +76,8 @@ public class SecurityConfig {
                                 "/api/events",
                                 "/api/events/*",
                                 "/api/categories",
-                                "/api/queue/*/status")
+                                "/api/queue/*/status",
+                                "/uploads/events/**")
                         .permitAll()
                         // STOMP phòng chờ tự xác thực ở queue-service; IPN do MoMo gọi server-to-server
                         // (xác thực bằng chữ ký trong body).

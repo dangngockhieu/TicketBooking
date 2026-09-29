@@ -49,6 +49,11 @@ spring:
               uri: lb://catalog-service
               predicates:
                 - Path=/api/admin/events/**
+            # Ảnh banner sự kiện lưu trên đĩa catalog-service (WebConfig, /uploads/events/**)
+            - id: catalog-service-event-images
+              uri: lb://catalog-service
+              predicates:
+                - Path=/uploads/events/**
             - id: auth-service-admin-organizers
               uri: lb://auth-service
               predicates:
