@@ -104,7 +104,7 @@ class MomoClientTest {
                 .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
 
         MomoRefundResponse response = momoClient.refund(
-                bookingId, new BigDecimal("3000000"), 4123456789L, "Hoàn tiền do lỗi hệ thống");
+                bookingId, new BigDecimal("3000000"), 4123456789L, "Hoàn tiền do lỗi hệ thống", "refund-req-1");
 
         assertEquals(true, response.isSuccess());
         server.verify();
@@ -117,6 +117,6 @@ class MomoClientTest {
                 .andRespond(withServerError());
 
         assertThrows(BadGatewayException.class,
-                () -> momoClient.refund(bookingId, new BigDecimal("100000"), 123L, "test"));
+                () -> momoClient.refund(bookingId, new BigDecimal("100000"), 123L, "test", "refund-req-2"));
     }
 }

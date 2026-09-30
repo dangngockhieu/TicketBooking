@@ -26,6 +26,7 @@ import com.ticketbooking.payment.momo.dto.MomoIpnRequest;
 import com.ticketbooking.payment.momo.dto.MomoRefundResponse;
 import com.ticketbooking.payment.repository.TransactionRepository;
 import com.ticketbooking.payment.service.OrganizerWalletService;
+import com.ticketbooking.payment.service.PaymentIdempotencyService;
 import com.ticketbooking.payment.service.PaymentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -56,6 +58,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentEventPublisher eventPublisher;
     private final OrganizerWalletService organizerWalletService;
     private final ObjectMapper objectMapper;
+    private final PaymentIdempotencyService idempotencyService;
 
     public PaymentServiceImpl(
             TransactionRepository transactionRepository,
@@ -66,7 +69,8 @@ public class PaymentServiceImpl implements PaymentService {
             MomoProperties momoProperties,
             PaymentEventPublisher eventPublisher,
             OrganizerWalletService organizerWalletService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            PaymentIdempotencyService idempotencyService) {
         this.transactionRepository = transactionRepository;
         this.bookingClient = bookingClient;
         this.catalogClient = catalogClient;
@@ -76,11 +80,22 @@ public class PaymentServiceImpl implements PaymentService {
         this.eventPublisher = eventPublisher;
         this.organizerWalletService = organizerWalletService;
         this.objectMapper = objectMapper;
+        this.idempotencyService = idempotencyService;
     }
 
     @Override
-    public PaymentInitiateResponse initiate(UUID customerId, String bearerToken, InitiatePaymentRequest request) {
+    public PaymentInitiateResponse initiate(
+            UUID customerId, String bearerToken, InitiatePaymentRequest request, String idempotencyKey) {
         log.info("Customer {} khởi tạo thanh toán cho booking {}", customerId, request.bookingId());
+
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<PaymentInitiateResponse> cached = idempotencyService.findCachedResponse(idempotencyKey);
+            if (cached.isPresent()) {
+                log.info("Idempotency key {} đã có response trước đó, trả lại không gọi MoMo lại.", idempotencyKey);
+                return cached.get();
+            }
+        }
+
         BookingDto booking = bookingClient.getBooking(request.bookingId(), bearerToken);
 
         if (STATUS_PAID.equals(booking.status())) {
@@ -119,8 +134,14 @@ public class PaymentServiceImpl implements PaymentService {
         }
         transactionRepository.save(transaction);
 
-        return new PaymentInitiateResponse(
+        PaymentInitiateResponse response = new PaymentInitiateResponse(
                 transaction.getId(), booking.id(), booking.totalAmount(), momoResponse.payUrl(), booking.expiredAt());
+
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            idempotencyService.saveResponse(idempotencyKey, response);
+        }
+
+        return response;
     }
 
     @Override
@@ -218,8 +239,9 @@ public class PaymentServiceImpl implements PaymentService {
         String description = "Hoàn tiền đơn hàng " + event.getBookingId()
                 + (event.getReason() != null ? ": " + event.getReason() : "");
 
+        String requestId = "refund-" + transaction.getId();
         MomoRefundResponse response = momoClient.refund(transaction.getBookingId(), transaction.getAmount(), transId,
-                description);
+                description, requestId);
         if (!response.isSuccess()) {
             log.error(
                     "MoMo từ chối hoàn tiền giao dịch {} (transId={}): resultCode={}, message={} — cần xử lý thủ công.",

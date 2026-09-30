@@ -64,6 +64,9 @@ class PaymentServiceImplTest {
     @Mock
     private OrganizerWalletService organizerWalletService;
 
+    @Mock
+    private PaymentIdempotencyService idempotencyService;
+
     private MomoProperties momoProperties;
     private MomoSignatureService momoSignatureService;
     private PaymentServiceImpl paymentService;
@@ -79,7 +82,8 @@ class PaymentServiceImplTest {
                 "http://localhost:8080/api/payments/momo/ipn");
         momoSignatureService = new MomoSignatureService(momoProperties);
         paymentService = new PaymentServiceImpl(transactionRepository, bookingClient, catalogClient, momoClient,
-                momoSignatureService, momoProperties, eventPublisher, organizerWalletService, new ObjectMapper());
+                momoSignatureService, momoProperties, eventPublisher, organizerWalletService, new ObjectMapper(),
+                idempotencyService);
         customerId = UUID.randomUUID();
         bookingId = UUID.randomUUID();
     }
@@ -106,7 +110,7 @@ class PaymentServiceImplTest {
         when(momoClient.createPayment(eq(bookingId), any(), any(), any())).thenReturn(momoResponse);
 
         PaymentInitiateResponse response = paymentService.initiate(
-                customerId, TOKEN, new InitiatePaymentRequest(bookingId, "https://ticketbooking.vn/result"));
+                customerId, TOKEN, new InitiatePaymentRequest(bookingId, "https://ticketbooking.vn/result"), null);
 
         assertEquals("https://payment.momo.vn/pay?t=abc", response.paymentUrl());
         assertEquals(bookingId, response.bookingId());
@@ -123,7 +127,7 @@ class PaymentServiceImplTest {
         when(bookingClient.getBooking(bookingId, TOKEN)).thenReturn(paidBooking);
 
         assertThrows(ConflictException.class, () -> paymentService.initiate(
-                customerId, TOKEN, new InitiatePaymentRequest(bookingId, null)));
+                customerId, TOKEN, new InitiatePaymentRequest(bookingId, null), null));
         verifyNoInteractions(momoClient);
     }
 
@@ -134,7 +138,7 @@ class PaymentServiceImplTest {
         when(bookingClient.getBooking(bookingId, TOKEN)).thenReturn(expiredBooking);
 
         assertThrows(ConflictException.class, () -> paymentService.initiate(
-                customerId, TOKEN, new InitiatePaymentRequest(bookingId, null)));
+                customerId, TOKEN, new InitiatePaymentRequest(bookingId, null), null));
         verifyNoInteractions(momoClient);
     }
 
@@ -145,7 +149,7 @@ class PaymentServiceImplTest {
                 eq(List.of(TransactionStatus.PENDING, TransactionStatus.SUCCESS)))).thenReturn(true);
 
         assertThrows(ConflictException.class, () -> paymentService.initiate(
-                customerId, TOKEN, new InitiatePaymentRequest(bookingId, null)));
+                customerId, TOKEN, new InitiatePaymentRequest(bookingId, null), null));
         verifyNoInteractions(momoClient);
     }
 
@@ -166,7 +170,7 @@ class PaymentServiceImplTest {
         when(momoClient.createPayment(eq(bookingId), any(), any(), any())).thenReturn(rejected);
 
         assertThrows(BadGatewayException.class, () -> paymentService.initiate(
-                customerId, TOKEN, new InitiatePaymentRequest(bookingId, null)));
+                customerId, TOKEN, new InitiatePaymentRequest(bookingId, null), null));
 
         ArgumentCaptor<Transaction> captor = ArgumentCaptor.forClass(Transaction.class);
         verify(transactionRepository, times(2)).save(captor.capture());
@@ -355,7 +359,7 @@ class PaymentServiceImplTest {
         when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
         MomoRefundResponse response = new MomoRefundResponse(
                 "MOMOPARTNER", "orderId", "reqId", 3000000L, 0, "Successful.", 4123456789L);
-        when(momoClient.refund(eq(bookingId), eq(new BigDecimal("3000000")), eq(4123456789L), anyString()))
+        when(momoClient.refund(eq(bookingId), eq(new BigDecimal("3000000")), eq(4123456789L), anyString(), anyString()))
                 .thenReturn(response);
 
         paymentService.processRefund(refundRequestedEvent(transactionId));
@@ -409,7 +413,7 @@ class PaymentServiceImplTest {
         when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
         MomoRefundResponse rejected = new MomoRefundResponse(
                 "MOMOPARTNER", "orderId", "reqId", 3000000L, 99, "Refund rejected.", null);
-        when(momoClient.refund(eq(bookingId), eq(new BigDecimal("3000000")), eq(4123456789L), anyString()))
+        when(momoClient.refund(eq(bookingId), eq(new BigDecimal("3000000")), eq(4123456789L), anyString(), anyString()))
                 .thenReturn(rejected);
 
         paymentService.processRefund(refundRequestedEvent(transactionId));

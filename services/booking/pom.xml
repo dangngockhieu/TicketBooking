@@ -57,6 +57,17 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-kafka</artifactId>
 		</dependency>
+		<!-- Retry cho lời gọi RestClient nội bộ khi gặp timeout thoáng qua (xem
+		     CatalogClient) — @Retryable cần AOP proxy, do đó cần spring-boot-starter-aspectj
+		     (Boot 4.x đổi tên từ spring-boot-starter-aop). -->
+		<dependency>
+			<groupId>org.springframework.retry</groupId>
+			<artifactId>spring-retry</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aspectj</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>

@@ -143,8 +143,9 @@ public class PayoutServiceImpl implements PayoutService {
                 if (payout.getStatus() != PayoutStatus.APPROVED) {
                     throw new ConflictException("Chỉ có thể chi trả yêu cầu đã được duyệt (APPROVED).");
                 }
+                String requestId = "disburse-" + payout.getId();
                 MomoDisburseResponse response = momoClient.disburse(payout.getId(), payout.getAmount(),
-                        payout.getBankAccountNumber(), "Chi trả doanh thu tổ chức sự kiện");
+                        payout.getBankAccountNumber(), "Chi trả doanh thu tổ chức sự kiện", requestId);
                 if (!response.isSuccess()) {
                     log.error("MoMo từ chối disburse cho payout {}: resultCode={}, message={}",
                             payout.getId(), response.resultCode(), response.message());

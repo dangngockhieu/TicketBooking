@@ -9,8 +9,12 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
@@ -35,6 +39,15 @@ public class BookingClient {
         this.restClient = restClientBuilder.baseUrl("http://" + bookingServiceName).build();
     }
 
+    @Retryable(
+            retryFor = {
+                    ResourceAccessException.class,
+                    HttpServerErrorException.ServiceUnavailable.class,
+                    HttpServerErrorException.GatewayTimeout.class,
+                    HttpClientErrorException.TooManyRequests.class
+            },
+            maxAttempts = 2,
+            backoff = @Backoff(delay = 200))
     public BookingDto getBooking(UUID bookingId, String bearerToken) {
         try {
             ApiResponse<BookingDto> response = restClient.get()
@@ -48,8 +61,11 @@ public class BookingClient {
             throw new ResourceNotFoundException("Không tìm thấy đơn hàng.");
         } catch (HttpClientErrorException.Forbidden ex) {
             throw new ForbiddenException("Đơn hàng không thuộc về bạn.");
-        } catch (ResourceAccessException ex) {
-            throw new TimeoutException("Booking Service không phản hồi kịp thời.");
         }
+    }
+
+    @Recover
+    public BookingDto recoverGetBooking(Exception ex, UUID bookingId, String bearerToken) {
+        throw new TimeoutException("Booking Service không phản hồi kịp thời.");
     }
 }

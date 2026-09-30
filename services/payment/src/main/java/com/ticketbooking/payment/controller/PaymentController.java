@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,10 +29,19 @@ public class PaymentController {
         this.paymentService = paymentService;
     }
 
+    /**
+     * {@code Idempotency-Key} (tùy chọn, client tự sinh UUID mỗi lần bấm nút
+     * thanh toán) — chống double-click/double-submit tạo 2 giao dịch MoMo cho
+     * cùng 1 booking (xem PaymentIdempotencyService). Không truyền vẫn hoạt
+     * động bình thường, chỉ mất khả năng chống double-submit.
+     */
     @PostMapping("/initiate")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<ApiResponse<PaymentInitiateResponse>> initiate(@Valid @RequestBody InitiatePaymentRequest request) {
-        PaymentInitiateResponse response = paymentService.initiate(currentCustomerId(), currentBearerToken(), request);
+    public ResponseEntity<ApiResponse<PaymentInitiateResponse>> initiate(
+            @Valid @RequestBody InitiatePaymentRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        PaymentInitiateResponse response = paymentService.initiate(
+                currentCustomerId(), currentBearerToken(), request, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.success("Khởi tạo thanh toán thành công.", response));
     }
 

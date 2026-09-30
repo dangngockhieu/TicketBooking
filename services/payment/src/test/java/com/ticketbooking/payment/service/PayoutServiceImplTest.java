@@ -150,7 +150,7 @@ class PayoutServiceImplTest {
         when(payoutRequestRepository.findById(payout.getId())).thenReturn(Optional.of(payout));
         when(payoutRequestRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         MomoDisburseResponse response = new MomoDisburseResponse("orderId", "req-1", 0, "Successful.", 123L);
-        when(momoClient.disburse(eq(payout.getId()), eq(new BigDecimal("500000")), eq("123"), anyString()))
+        when(momoClient.disburse(eq(payout.getId()), eq(new BigDecimal("500000")), eq("123"), anyString(), anyString()))
                 .thenReturn(response);
 
         PayoutResponse result = payoutService.updateStatus(payout.getId(),

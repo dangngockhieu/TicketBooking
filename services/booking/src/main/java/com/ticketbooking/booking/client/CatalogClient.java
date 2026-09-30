@@ -7,8 +7,12 @@ import com.ticketbooking.common.exception.TimeoutException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
@@ -31,6 +35,19 @@ public class CatalogClient {
         this.restClient = restClientBuilder.baseUrl("http://" + catalogServiceName).build();
     }
 
+    /**
+     * Retry 1 lần trên lỗi thoáng qua (connect timeout, 503, 504, 429) — KHÔNG
+     * retry lỗi logic xác định (400/401/404), vì thử lại không bao giờ giúp ích.
+     */
+    @Retryable(
+            retryFor = {
+                    ResourceAccessException.class,
+                    HttpServerErrorException.ServiceUnavailable.class,
+                    HttpServerErrorException.GatewayTimeout.class,
+                    HttpClientErrorException.TooManyRequests.class
+            },
+            maxAttempts = 2,
+            backoff = @Backoff(delay = 200))
     public CatalogEventDto getEvent(UUID eventId) {
         try {
             ApiResponse<CatalogEventDto> response = restClient.get()
@@ -41,8 +58,12 @@ public class CatalogClient {
             return response != null ? response.getData() : null;
         } catch (HttpClientErrorException.NotFound ex) {
             throw new ResourceNotFoundException("Không tìm thấy sự kiện.");
-        } catch (ResourceAccessException ex) {
-            throw new TimeoutException("Catalog Service không phản hồi kịp thời.");
         }
+    }
+
+    /** Sau khi retry cạn mà vẫn lỗi thoáng qua — chuẩn hóa về TimeoutException. */
+    @Recover
+    public CatalogEventDto recoverGetEvent(Exception ex, UUID eventId) {
+        throw new TimeoutException("Catalog Service không phản hồi kịp thời.");
     }
 }

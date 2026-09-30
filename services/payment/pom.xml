@@ -45,6 +45,12 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
+		<!-- Idempotency key cho POST /api/payments/initiate (chống double-click/
+		     double-submit) — lưu key -> response đã trả trước đó, TTL ngắn. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-flyway</artifactId>
@@ -52,6 +58,18 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-kafka</artifactId>
+		</dependency>
+		<!-- Retry cho lời gọi RestClient nội bộ + MoMo khi gặp timeout thoáng qua
+		     (xem CatalogClient, UserClient, BookingClient, MomoClient) — @Retryable
+		     cần AOP proxy, do đó cần spring-boot-starter-aspectj (Boot 4.x đổi tên
+		     từ spring-boot-starter-aop). -->
+		<dependency>
+			<groupId>org.springframework.retry</groupId>
+			<artifactId>spring-retry</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-aspectj</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

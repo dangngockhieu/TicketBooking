@@ -12,10 +12,14 @@ public interface PaymentService {
     /**
      * Khởi tạo thanh toán MoMo cho một booking (xem docs/api-design.md §5.1).
      *
-     * @param customerId  chủ booking đang gọi (lấy từ JWT)
-     * @param bearerToken forward nguyên vẹn sang Booking Service để service đó tự verify quyền sở hữu
+     * @param customerId     chủ booking đang gọi (lấy từ JWT)
+     * @param bearerToken    forward nguyên vẹn sang Booking Service để service đó tự verify quyền sở hữu
+     * @param idempotencyKey tùy chọn (client tự sinh) — nếu trùng key của một lần gọi
+     *                       thành công trước đó trong TTL, trả lại response cũ thay vì
+     *                       tạo giao dịch MoMo mới (chống double-click/double-submit)
      */
-    PaymentInitiateResponse initiate(UUID customerId, String bearerToken, InitiatePaymentRequest request);
+    PaymentInitiateResponse initiate(
+            UUID customerId, String bearerToken, InitiatePaymentRequest request, String idempotencyKey);
 
     /**
      * Xử lý MoMo IPN Callback (xem docs/api-design.md §5.2) — verify signature,
