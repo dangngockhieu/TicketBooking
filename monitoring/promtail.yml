@@ -1,0 +1,25 @@
+# Promtail — tự động phát hiện mọi container Docker (qua docker.sock) và đẩy
+# log của chúng vào Loki. Không cần cấu hình riêng cho từng service.
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Gắn label "compose_service" từ tên container (bỏ prefix ticketbooking-)
+      # để lọc theo service trong Grafana, vd {compose_service="auth"}.
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/ticketbooking-(.*)"
+        target_label: "compose_service"
+      - source_labels: ["__meta_docker_container_name"]
+        target_label: "container_name"

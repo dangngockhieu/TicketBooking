@@ -157,7 +157,9 @@ Hệ thống tuân thủ nghiêm ngặt nguyên tắc **Database per Service** v
 | **Kafka Management** | Kafka UI | Giao diện web trực quan quản trị Topics & Consumers (Port 8090) |
 | **Service Discovery** | Spring Cloud Eureka | Quản lý định tuyến và phát hiện dịch vụ động (Port 8761) |
 | **Config Management** | Spring Cloud Config | Quản lý tập trung toàn bộ cấu hình hệ thống (Port 8888) |
-| **Observability** | Prometheus + Grafana + Jaeger | Metrics, Alerting, Dashboard và Distributed Tracing |
+| **Metrics & Dashboard** | Prometheus + Grafana | Metrics, Alerting, Dashboard |
+| **Log tập trung** | Grafana Loki + Promtail | Gom log mọi container, xem/lọc qua Grafana Explore (Port 3100) |
+| **Distributed Tracing** | Micrometer Tracing + Zipkin | TraceId xuyên suốt request qua HTTP & Kafka, xem tại Zipkin UI (Port 9411) |
 | **Bảo mật** | JWT + RBAC | Access Token (ngắn hạn) + Refresh Token |
 | **DevOps & Containers** | Docker & Docker Compose | Đóng gói toàn bộ infrastructure và services |
 
@@ -246,7 +248,9 @@ docker compose ps
 | **Kafka UI Dashboard** | [http://localhost:8090](http://localhost:8090) | `admin` / `admin_kafka_2026` |
 | **MongoDB** | `localhost:27017` | `mongo_admin` / `mongo_secure_pass_2026` |
 | **Prometheus** | [http://localhost:9090](http://localhost:9090) | Metrics Scraper |
-| **Grafana Dashboard** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin_grafana_2026` |
+| **Grafana Dashboard** | [http://localhost:3000](http://localhost:3000) | `admin` / `admin_grafana_2026` — xem log tập trung tại tab **Explore** → datasource **Loki** |
+| **Loki** | `localhost:3100` | API nội bộ, không cần truy cập trực tiếp — xem log qua Grafana Explore |
+| **Zipkin UI** | [http://localhost:9411](http://localhost:9411) | Xem distributed trace — tìm theo `traceId` (cũng in trong log mỗi service) |
 
 Dừng toàn bộ hệ thống:
 ```bash

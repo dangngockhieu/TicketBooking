@@ -227,6 +227,43 @@ services:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
+      - loki
+    networks:
+      - ticketbooking-network
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: ticketbooking-loki
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - ticketbooking-network
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: ticketbooking-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - ticketbooking-network
+
+  zipkin:
+    image: openzipkin/zipkin:3.4
+    container_name: ticketbooking-zipkin
+    restart: unless-stopped
+    ports:
+      - "${ZIPKIN_PORT:-9411}:9411"
     networks:
       - ticketbooking-network
 
@@ -285,6 +322,7 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secure_pass_2026}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+      ZIPKIN_HOST: zipkin
       # Cặp khoá RS256 (xem .env.example mục 9) — mount từ host qua volume bên
       # dưới, path tuyệt đối trong container thay vì path tương đối như khi
       # chạy bằng mvnw.
@@ -321,6 +359,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${USER_DB_PASSWORD:-user_svc_pass_2026}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:8081/.well-known/jwks.json
+      ZIPKIN_HOST: zipkin
     depends_on:
       postgres-user:
         condition: service_healthy
@@ -349,6 +388,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:8081/.well-known/jwks.json
+      ZIPKIN_HOST: zipkin
     depends_on:
       postgres-catalog:
         condition: service_healthy
@@ -381,6 +421,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:8081/.well-known/jwks.json
+      ZIPKIN_HOST: zipkin
     depends_on:
       postgres-booking:
         condition: service_healthy
@@ -413,6 +454,7 @@ services:
       MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-at67qH6mk8w5Y1nAyMoTKhpAoNTVMkSf}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:8081/.well-known/jwks.json
+      ZIPKIN_HOST: zipkin
     depends_on:
       postgres-payment:
         condition: service_healthy
@@ -439,6 +481,7 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secure_pass_2026}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:8081/.well-known/jwks.json
+      ZIPKIN_HOST: zipkin
     depends_on:
       redis:
         condition: service_healthy
@@ -467,6 +510,7 @@ services:
       NOTIFICATION_MAIL_FROM: ${MAIL_FROM:-no-reply@ticketbooking.vn}
       NOTIFICATION_MAIL_SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@ticketbooking.vn}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
+      ZIPKIN_HOST: zipkin
     depends_on:
       mongodb:
         condition: service_healthy
@@ -490,6 +534,7 @@ services:
       SPRING_CONFIG_IMPORT: optional:configserver:http://config-server:8888
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery:8761/eureka/
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-service:8081/.well-known/jwks.json
+      ZIPKIN_HOST: zipkin
     depends_on:
       - discovery
       - auth-service
@@ -522,6 +567,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  loki_data:
     driver: local
 
 # ==============================================================================

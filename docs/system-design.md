@@ -207,7 +207,8 @@ Tuân thủ nghiêm ngặt mô hình **Database per Service**:
 ## 7. Giám Sát Hệ Thống (Observability)
 
 * **Prometheus & Grafana:** Thu thập số liệu RPS, tỷ lệ lỗi HTTP 5xx, độ trễ p95/p99, dung lượng RAM/CPU của từng container, số người đang đợi trong phòng chờ ảo.
-* **OpenTelemetry & Jaeger / Zipkin:** Truy vết phân tán (Distributed Tracing). Mỗi request được gắn một `TraceId` duy nhất để theo dõi toàn bộ hành trình từ Gateway qua các service và Kafka.
+* **Log tập trung (Grafana Loki + Promtail):** Promtail tự động đọc log của mọi container qua Docker socket (không cần sửa code/thêm dependency ở từng service) và đẩy vào Loki; xem/lọc log theo service qua Grafana Explore (datasource "Loki", nhãn `compose_service`). Xem `monitoring/loki.yml`, `monitoring/promtail.yml`.
+* **Distributed Tracing (Micrometer Tracing + Brave + Zipkin):** Đã triển khai — `spring-boot-starter-zipkin` ở 8 service nghiệp vụ (auth, api-gateway, user, catalog, booking, payment, queue, notification; không bật ở `discovery`/`config-server`). Span gửi tới Zipkin server (`monitoring` không có file riêng, chỉ là container `zipkin` trong docker-compose) tại `localhost:9411` (property `management.tracing.export.zipkin.endpoint`, cấu hình dùng chung ở `services/config-server/.../application.yaml`). `TraceId` tự động điền vào log pattern (`%X{traceId}`) đã có từ trước. Sampling giữ mặc định của Boot (`management.tracing.sampling.probability = 0.1`, 10%). Kafka producer/consumer bật `observation-enabled: true` ở service có `KafkaTemplate`/`@KafkaListener` để trace không bị đứt đoạn khi đi qua Kafka. 3 `RestClient.Builder` bean tự định nghĩa (`CatalogClientConfig` ở booking, `InternalClientConfig`/`MomoConfig` ở payment) phải tự áp `RestClientCustomizer` (qua `ObjectProvider`, lazy-resolve) vì chúng che mất auto-config mặc định của Boot — xem comment trong các file đó.
 
 ---
 

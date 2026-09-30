@@ -253,6 +253,55 @@ services:
       - "${GRAFANA_PORT:-3000}:3000"
     depends_on:
       - prometheus
+      - loki
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 12. LOKI (Kho lưu trữ log tập trung — xem qua Grafana Explore, datasource
+  # tự đăng ký tại monitoring/grafana/provisioning/datasources/loki-datasource.yml)
+  # ==============================================================================
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: ticketbooking-loki
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 13. PROMTAIL (Tự động đọc log của mọi container qua Docker socket, đẩy vào
+  # Loki — không cần sửa code hay thêm dependency ở bất kỳ service Java nào)
+  # ==============================================================================
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: ticketbooking-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - ticketbooking-network
+
+  # ==============================================================================
+  # 14. ZIPKIN (Distributed Tracing — nhận span từ Micrometer Tracing/Brave của
+  # mọi service, xem traceId xuyên suốt request tại localhost:9411)
+  # ==============================================================================
+  zipkin:
+    image: openzipkin/zipkin:3.4
+    container_name: ticketbooking-zipkin
+    restart: unless-stopped
+    ports:
+      - "${ZIPKIN_PORT:-9411}:9411"
     networks:
       - ticketbooking-network
 
@@ -279,6 +328,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  loki_data:
     driver: local
 
 # ==============================================================================
