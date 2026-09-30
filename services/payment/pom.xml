@@ -65,6 +65,13 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
+		<!-- ClientHttpRequestFactoryBuilder/HttpClientSettings (timeout cho RestClient
+		     gọi nội bộ + MoMo, xem InternalClientConfig/MomoConfig) — spring-boot-starter-webmvc
+		     KHÔNG tự kéo theo (khác spring-boot-starter-web). -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-restclient</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>

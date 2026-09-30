@@ -1,12 +1,14 @@
 package com.ticketbooking.payment.client;
 
 import com.ticketbooking.common.dto.ApiResponse;
+import com.ticketbooking.common.exception.TimeoutException;
 import com.ticketbooking.payment.client.dto.BankAccountDto;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import java.util.UUID;
@@ -31,13 +33,17 @@ public class UserClient {
      * service tự verify quyền.
      */
     public BankAccountDto getMyBankAccount(String bearerToken) {
-        ApiResponse<BankAccountDto> response = restClient.get()
-                .uri("/api/organizer/bank-account")
-                .header(HttpHeaders.AUTHORIZATION, bearerToken)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<BankAccountDto>>() {
-                });
-        return response != null ? response.getData() : null;
+        try {
+            ApiResponse<BankAccountDto> response = restClient.get()
+                    .uri("/api/organizer/bank-account")
+                    .header(HttpHeaders.AUTHORIZATION, bearerToken)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<ApiResponse<BankAccountDto>>() {
+                    });
+            return response != null ? response.getData() : null;
+        } catch (ResourceAccessException ex) {
+            throw new TimeoutException("User Service không phản hồi kịp thời.");
+        }
     }
 
     /**
@@ -45,11 +51,15 @@ public class UserClient {
      * InternalOrganizerBankAccountController).
      */
     public BankAccountDto getBankAccountByOrganizerId(UUID organizerId) {
-        ApiResponse<BankAccountDto> response = restClient.get()
-                .uri("/api/internal/organizers/{id}/bank-account", organizerId)
-                .retrieve()
-                .body(new ParameterizedTypeReference<ApiResponse<BankAccountDto>>() {
-                });
-        return response != null ? response.getData() : null;
+        try {
+            ApiResponse<BankAccountDto> response = restClient.get()
+                    .uri("/api/internal/organizers/{id}/bank-account", organizerId)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<ApiResponse<BankAccountDto>>() {
+                    });
+            return response != null ? response.getData() : null;
+        } catch (ResourceAccessException ex) {
+            throw new TimeoutException("User Service không phản hồi kịp thời.");
+        }
     }
 }

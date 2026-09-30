@@ -88,6 +88,12 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.BAD_GATEWAY, exception.getMessage(), null);
     }
 
+    @ExceptionHandler(TimeoutException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTimeout(TimeoutException exception) {
+        log.error("Timeout khi gọi dịch vụ nội bộ: {}", exception.getMessage());
+        return buildErrorResponse(HttpStatus.GATEWAY_TIMEOUT, exception.getMessage(), null);
+    }
+
     @ExceptionHandler(MissingRequestHeaderException.class)
     public ResponseEntity<ApiResponse<Void>> handleMissingHeader(MissingRequestHeaderException exception) {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Thiếu header bắt buộc: " + exception.getHeaderName(), null);

@@ -2,12 +2,14 @@ package com.ticketbooking.payment.client;
 
 import com.ticketbooking.common.dto.ApiResponse;
 import com.ticketbooking.common.exception.ResourceNotFoundException;
+import com.ticketbooking.common.exception.TimeoutException;
 import com.ticketbooking.payment.client.dto.CatalogEventDto;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import java.util.UUID;
@@ -37,6 +39,8 @@ public class CatalogClient {
             return response != null ? response.getData() : null;
         } catch (HttpClientErrorException.NotFound ex) {
             throw new ResourceNotFoundException("Không tìm thấy sự kiện.");
+        } catch (ResourceAccessException ex) {
+            throw new TimeoutException("Catalog Service không phản hồi kịp thời.");
         }
     }
 }

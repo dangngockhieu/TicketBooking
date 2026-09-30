@@ -3,6 +3,7 @@ package com.ticketbooking.payment.client;
 import com.ticketbooking.common.dto.ApiResponse;
 import com.ticketbooking.common.exception.ForbiddenException;
 import com.ticketbooking.common.exception.ResourceNotFoundException;
+import com.ticketbooking.common.exception.TimeoutException;
 import com.ticketbooking.payment.client.dto.BookingDto;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +11,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import java.util.UUID;
@@ -46,6 +48,8 @@ public class BookingClient {
             throw new ResourceNotFoundException("Không tìm thấy đơn hàng.");
         } catch (HttpClientErrorException.Forbidden ex) {
             throw new ForbiddenException("Đơn hàng không thuộc về bạn.");
+        } catch (ResourceAccessException ex) {
+            throw new TimeoutException("Booking Service không phản hồi kịp thời.");
         }
     }
 }
