@@ -267,7 +267,7 @@ k6 run k6/burst-booking-race-condition.js
 # Chạy kịch bản kiểm thử phòng chờ ảo:
 k6 run k6/virtual-waiting-room-test.js
 ```
-👉 Xem chi tiết tại [k6/README.md](k6/README.md) và kết quả nghiệm thu tại [Load Testing Report](docs/load-testing-report.md).
+👉 Xem chi tiết tại [k6/README.md](k6/README.md).
 
 ---
 

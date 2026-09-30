@@ -50,6 +50,12 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       acks: all
+      properties:
+        # max.block.ms chặn .send() treo vô hạn nếu không lấy được metadata (Kafka
+        # down/không tới được); delivery.timeout.ms phải >= request.timeout.ms.
+        request.timeout.ms: 10000
+        delivery.timeout.ms: 30000
+        max.block.ms: 10000
 
 # Cấu hình Token JWT — RS256 (RSA Asymmetric Keys). Key đọc từ file (base64 DER: PKCS8 private / X509 public),
 # đường dẫn file trỏ tới bởi biến môi trường, KHÔNG lưu nội dung key trực tiếp trong .env

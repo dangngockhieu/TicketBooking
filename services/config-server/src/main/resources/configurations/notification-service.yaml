@@ -43,6 +43,8 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: com.ticketbooking.common.event
+        session.timeout.ms: 15000
+        max.poll.interval.ms: 120000
 
 # Địa chỉ gửi đi + email hỗ trợ hiển thị trong footer template (xem
 # TicketBooking-Frontend/email-templates/README.md).
