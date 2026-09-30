@@ -49,6 +49,12 @@ spring:
   # tickets.generated cho Catalog/Notification Service
   kafka:
     bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}
+    # Bật observation để Micrometer Tracing gắn/đọc traceId qua Kafka message
+    # header (producer + consumer) — trace không bị đứt đoạn khi đi qua Kafka.
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer

@@ -37,6 +37,10 @@ spring:
   # mục 2, Consumer 3).
   kafka:
     bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}
+    # Bật observation để Micrometer Tracing đọc traceId từ Kafka message header
+    # (consumer) — trace không bị đứt đoạn khi đi qua Kafka.
+    listener:
+      observation-enabled: true
     consumer:
       group-id: notification-service
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer

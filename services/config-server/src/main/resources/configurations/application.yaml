@@ -32,6 +32,15 @@ management:
       show-details: always
       probes:
         enabled: true
+  # 7. Distributed Tracing (Micrometer Tracing + Brave) — gửi span tới Zipkin,
+  # traceId tự động điền vào %X{traceId} ở log pattern bên dưới. ZIPKIN_HOST
+  # mặc định "localhost" khi chạy bằng mvnw trên host; docker-compose.prod.yml
+  # override thành tên service "zipkin" trong mạng Docker. Sampling giữ mặc
+  # định của Boot (management.tracing.sampling.probability = 0.1, 10%).
+  tracing:
+    export:
+      zipkin:
+        endpoint: http://${ZIPKIN_HOST:localhost}:${ZIPKIN_PORT:9411}/api/v2/spans
 
 # 5. Tối ưu nén mạng GZIP
 server:

@@ -46,6 +46,10 @@ spring:
   # Notification Service gửi email OTP thật (xem docs/technical-flows.md §0).
   kafka:
     bootstrap-servers: ${KAFKA_HOST}:${KAFKA_PORT}
+    # Bật observation để Micrometer Tracing gắn traceId vào Kafka message header
+    # (producer) — trace không bị đứt đoạn khi request đi qua Kafka.
+    template:
+      observation-enabled: true
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer

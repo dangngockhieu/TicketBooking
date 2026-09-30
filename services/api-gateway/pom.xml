@@ -36,6 +36,14 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
+		<!-- Distributed tracing (Micrometer Tracing + Brave) — gửi span tới Zipkin
+		     (xem management.tracing.export.zipkin.endpoint trong application.yaml).
+		     Spring Cloud Gateway tự động propagate traceId qua header khi forward
+		     request (GatewayTracingAutoConfiguration), không cần cấu hình thêm. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-zipkin</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-redis-reactive</artifactId>
