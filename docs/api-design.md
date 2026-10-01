@@ -1116,38 +1116,140 @@ GET /queue/events/{eventId}/status
 
 ---
 
-## 9. Recommend Service API (AI Gợi Ý Sự Kiện)
+## 9. Recommend Service API (AI Gợi Ý Sự Kiện & Chatbot) 🆕
 
-### 9.1. Gợi ý sự kiện cá nhân hóa 🔒 (CUSTOMER)
+Microservice Python / FastAPI (Port 8088), tích hợp **OpenAI API (ChatGPT & Text Embeddings)** để cung cấp trải nghiệm khám phá sự kiện và tư vấn vé thông minh.
+
+### 9.1. Trợ lý AI Chatbot tư vấn vé sự kiện (AI Event Concierge) 🤖
+
+> Người dùng trò chuyện bằng ngôn ngữ tự nhiên tiếng Việt (ngân sách, thể loại, ca sĩ, địa điểm, tâm trạng). Chatbot sử dụng mô hình **OpenAI GPT-4o-mini** kết hợp kỹ thuật **RAG (Retrieval-Augmented Generation)** để tra cứu dữ liệu từ `catalog-service`, tư vấn và trả lời kèm danh sách card sự kiện tương ứng.
 
 ```http
-GET /recommendations/events/for-you?limit=10
+POST /api/recommendations/chat
 ```
 
-**Response (200):**
+**Request Body:**
 ```json
 {
-  "success": true,
-  "data": [
+  "message": "Cuối tuần này ở Hà Nội có show ca nhạc nào nhẹ nhàng tầm dưới 500k đi cùng bạn gái không?",
+  "conversationId": "c8a1b2c3-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+  "userLocation": "Hà Nội",
+  "history": [
     {
-      "eventId": "uuid",
-      "title": "Hà Anh Tuấn Live Concert - Chân Trời Rực Rỡ",
-      "categoryName": "Âm nhạc",
-      "matchScore": 0.94,
-      "reasons": ["Phù hợp với sở thích Acoustic/Pop", "Dựa trên lịch sử xem sự kiện tương tự"]
+      "role": "user",
+      "content": "Chào bot, mình muốn tìm vé concert"
+    },
+    {
+      "role": "assistant",
+      "content": "Chào bạn! Bạn muốn tìm thể loại nhạc gì và ở khu vực nào?"
     }
   ]
 }
 ```
 
-### 9.2. Sự kiện tương tự (Similar Events)
-
-```http
-GET /recommendations/events/{eventId}/similar?limit=5
+**Response (200 OK):**
+```json
+{
+  "status": 0,
+  "message": "Thành công",
+  "data": {
+    "reply": "Chào bạn! Cuối tuần này tại Hà Nội, TicketBooking gợi ý đêm nhạc acoustic 'Hà Anh Tuấn Live Concert' hoặc đêm nhạc Indie acoustic rất thích hợp cho hai bạn. Giá vé khởi điểm chỉ từ 450.000đ/vé tại Trung tâm Hội nghị Quốc gia.",
+    "suggestedEvents": [
+      {
+        "id": "e1000000-0000-0000-0000-000000000001",
+        "title": "Hà Anh Tuấn Live Concert - Chân Trời Rực Rỡ",
+        "description": "Đêm nhạc acoustic lãng mạn đầy cảm xúc...",
+        "categoryName": "Âm nhạc",
+        "venue": "Trung tâm Hội nghị Quốc gia",
+        "address": "Mỹ Đình, Nam Từ Liêm, Hà Nội",
+        "startDate": "2026-10-18T19:30:00Z",
+        "bannerUrl": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819",
+        "minPrice": 450000,
+        "maxPrice": 1800000,
+        "status": "PUBLISHED"
+      }
+    ],
+    "followUpQuestions": [
+      "Bạn muốn xem show vào thứ 7 hay Chủ Nhật?",
+      "Bạn thích ngồi hàng ghế gần sân khấu (VIP) hay khu vực khán đài tiêu chuẩn?"
+    ]
+  },
+  "responseTime": 1728160000000
+}
 ```
 
 ---
 
-> 🔒 = Yêu cầu JWT Authentication
+### 9.2. Gợi ý sự kiện cá nhân hóa trên Trang Chủ (For You Feed) ✨
+
+> Hiển thị danh sách card sự kiện "Dành riêng cho bạn" trên Trang chủ dựa trên sở thích, lịch sử xem và xu hướng cộng đồng.
+
+```http
+GET /api/recommendations/events/for-you?limit=10&userId={userId}&categories=Âm nhạc,Thể thao
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": 0,
+  "message": "Thành công",
+  "data": [
+    {
+      "eventId": "e1000000-0000-0000-0000-000000000001",
+      "title": "Hà Anh Tuấn Live Concert - Chân Trời Rực Rỡ",
+      "categoryName": "Âm nhạc",
+      "venue": "Trung tâm Hội nghị Quốc gia",
+      "bannerUrl": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819",
+      "minPrice": 450000,
+      "maxPrice": 1800000,
+      "matchScore": 0.96,
+      "reasons": [
+        "Phù hợp với sở thích thể loại Âm nhạc",
+        "Dựa trên xu hướng mua vé của cộng đồng"
+      ]
+    }
+  ],
+  "responseTime": 1728160000000
+}
+```
+
+---
+
+### 9.3. Gợi ý sự kiện tương tự (Similar Events) 🔍
+
+> Hiển thị ở chân trang chi tiết sự kiện ("Các sự kiện tương tự có thể bạn quan tâm"). Sử dụng mô hình **OpenAI `text-embedding-3-small`** để tính độ tương đồng vector Cosine Similarity giữa tiêu đề, mô tả và thể loại.
+
+```http
+GET /api/recommendations/events/{eventId}/similar?limit=5
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": 0,
+  "message": "Thành công",
+  "data": [
+    {
+      "eventId": "e1000000-0000-0000-0000-000000000002",
+      "title": "Indie Rock Festival - Sóng Trẻ 2026",
+      "categoryName": "Âm nhạc",
+      "venue": "Sân vận động Hoa Lư",
+      "bannerUrl": "https://images.unsplash.com/photo-1470225620780-dba8ba36b745",
+      "minPrice": 250000,
+      "maxPrice": 650000,
+      "matchScore": 0.88,
+      "reasons": [
+        "Cùng thể loại Âm nhạc",
+        "Mức độ tương đồng nội dung: 88%"
+      ]
+    }
+  ],
+  "responseTime": 1728160000000
+}
+```
+
+---
+
+> 🔒 = Yêu cầu JWT Authentication (tùy chọn cho người dùng đã đăng nhập)
 >
 > 📄 Xem thêm: [System Design](system-design.md) | [Database Schema](database-schema.md) | [Technical Flows](technical-flows.md) | [Virtual Waiting Room](virtual-waiting-room.md)

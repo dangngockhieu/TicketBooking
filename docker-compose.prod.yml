@@ -541,6 +541,28 @@ services:
       - catalog-service
       - booking-service
       - payment-service
+      - recommend-service
+    networks:
+      - ticketbooking-network
+
+  # ============================================================================
+  # 4. AI RECOMMENDATION & CHATBOT SERVICE (Python / FastAPI)
+  # ============================================================================
+  recommend-service:
+    build:
+      context: services/recommend
+      dockerfile: Dockerfile
+    container_name: ticketbooking-recommend-service
+    restart: unless-stopped
+    ports:
+      - "${RECOMMEND_PORT:-8088}:8088"
+    environment:
+      PORT: 8088
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      CATALOG_SERVICE_URL: http://catalog-service:8083
+    depends_on:
+      - catalog-service
     networks:
       - ticketbooking-network
 
