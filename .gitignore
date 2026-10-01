@@ -91,3 +91,15 @@ services/catalog/uploads/**
 # Internal / Private Docs
 docs/development-plan.md
 docs/load-testing-report.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+
