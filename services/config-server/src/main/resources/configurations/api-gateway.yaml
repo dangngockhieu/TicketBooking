@@ -134,6 +134,17 @@ spring:
                 - Path=/docs/queue-service/v3/api-docs
               filters:
                 - RewritePath=/docs/queue-service/v3/api-docs, /v3/api-docs
+            # AI Recommendation & Chatbot Service (Python / FastAPI :8088)
+            - id: recommend-service
+              uri: http://${RECOMMEND_HOST:recommend-service}:${RECOMMEND_PORT:8088}
+              predicates:
+                - Path=/api/recommendations/**
+            - id: recommend-service-api-docs
+              uri: http://${RECOMMEND_HOST:recommend-service}:${RECOMMEND_PORT:8088}
+              predicates:
+                - Path=/docs/recommend-service/v3/api-docs
+              filters:
+                - RewritePath=/docs/recommend-service/v3/api-docs, /v3/api-docs
 
   # §9.2 — JWT sơ bộ tại Gateway. Cùng jwk-set-uri với user-service: chỉ verify
   # bằng Public Key (Zero Trust), không giữ bí mật nào của auth-service.
@@ -143,7 +154,7 @@ spring:
         jwt:
           jwk-set-uri: http://localhost:8081/.well-known/jwks.json
 
-# Gateway's own springdoc-webflux-ui — dropdown gộp cả 6 service (Swagger UI
+# Gateway's own springdoc-webflux-ui — dropdown gộp cả các service (Swagger UI
 # mặc định tại /swagger-ui.html, "Try it out" gọi thẳng qua chính gateway
 # này nên JWT thật vẫn hoạt động bình thường). "springdoc" LUÔN là key gốc
 # (không nằm trong spring:), khác các mục còn lại ở file này.
@@ -162,6 +173,8 @@ springdoc:
         url: /docs/payment-service/v3/api-docs
       - name: queue-service
         url: /docs/queue-service/v3/api-docs
+      - name: recommend-service
+        url: /docs/recommend-service/v3/api-docs
 
 # CORS — origin frontend được phép gọi qua Gateway (điểm vào duy nhất, mỗi
 # service phía sau không tự cấu hình CORS riêng). Nhiều origin cách nhau bởi
